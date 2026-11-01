@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "location": "Lane 1",
+    "status": "active"
+  },
+  {
+    "id": 2,
+    "location": "Lane 2",
+    "status": "emergency"
+  },
+  {
+    "id": 3,
+    "location": "Lane 3",
+    "status": "idle"
+  },
+  {
+    "id": 4,
+    "location": "Lane 4",
+    "status": "active"
+  }
+]

@@ -68,7 +68,7 @@ This inventory covers the 128 files tracked in the repository. Installed depende
 
 | File | Purpose |
 |---|---|
-| `crud/README.md` | Older brief notes about the backend's CRUD/API stack. |
+| `crud/README.md` | Detailed backend file guide describing each backend file, its role, and its importance. |
 | `crud/activeambulances.json` | Sample lane/ambulance status data in JSON format. |
 | `crud/arduino_server/arduino-server.js` | Creates the `/api/dispatch` router and sends validated lane commands to the configured Arduino serial port. |
 | `crud/check-routes-conflicts.js` | Scans route files and reports duplicate HTTP method/path definitions. |

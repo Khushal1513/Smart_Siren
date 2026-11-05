@@ -15,7 +15,14 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "nodemon index.js",
+    "test": "jest --runInBand",
+    "migrate:ambulances": "node scripts/migrateActiveAmbulances.js"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/tests"],
+    "testTimeout": 60000
   },
   "dependencies": {
     "@serialport/parser-readline": "^13.0.0",

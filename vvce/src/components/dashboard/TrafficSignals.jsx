@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Clock } from 'lucide-react';
 
 const getStatusClass = (status) => {
   switch (status?.toLowerCase()) {
@@ -78,18 +79,29 @@ export const TrafficSignalsList = () => {
                   className="flex items-center justify-between gap-3 border-b pb-4 last:border-0 last:pb-0"
                 >
                   <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-medium">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium text-foreground">
                         {signal.location || [signal.intersection, signal.area, signal.city].filter(Boolean).join(', ') || 'Location unavailable'}
                       </span>
-                      <span className={getStatusClass(signal.status)}>
+                      <span className={`shrink-0 ${getStatusClass(signal.status)}`}>
                         {(signal.status || 'unknown').toUpperCase()}
                       </span>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Signal ID: {signal.signalId || 'Unavailable'}
-                      {signal.signalType ? ` · ${signal.signalType}` : ''}
+                      {signal.signalType && <span className="capitalize"> · {signal.signalType}</span>}
                     </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>
+                      {signal.updatedAt || signal.createdAt
+                        ? new Date(signal.updatedAt || signal.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'Registered'}
+                    </span>
                   </div>
                 </div>
               ))}

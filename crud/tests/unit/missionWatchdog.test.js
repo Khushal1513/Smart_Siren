@@ -1,12 +1,11 @@
-'use strict';
-
-const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
-const svc = require('../../services/mission/missionService');
-const { tick, startMissionWatchdog } = require('../../jobs/missionWatchdog');
-const bus = require('../../realtime/eventBus');
-const Mission = require('../../model/Mission');
-const { EVENTS } = require('../../config/constants');
+import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import * as svc from '../../services/mission/missionService.js';
+import { tick, startMissionWatchdog } from '../../jobs/missionWatchdog.js';
+import bus from '../../realtime/eventBus.js';
+import Mission from '../../model/Mission.js';
+import { EVENTS } from '../../config/constants.js';
 
 let mongod;
 

@@ -1,7 +1,5 @@
-'use strict';
-
-const mongoose = require('mongoose');
-const { MISSION_STATUS, MISSION_STATUS_VALUES, SEVERITY } = require('../config/constants');
+import mongoose from 'mongoose';
+import { MISSION_STATUS, MISSION_STATUS_VALUES, SEVERITY } from '../config/constants.js';
 
 const routeStopSchema = new mongoose.Schema(
   {
@@ -49,4 +47,6 @@ missionSchema.index({ status: 1 });
 missionSchema.index({ vehicleId: 1 });
 missionSchema.index({ legacyKey: 1 }, { unique: true, sparse: true });
 
-module.exports = mongoose.models.Mission || mongoose.model('Mission', missionSchema);
+const Mission = mongoose.models.Mission || mongoose.model('Mission', missionSchema);
+
+export default Mission;

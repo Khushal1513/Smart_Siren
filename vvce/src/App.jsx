@@ -2,12 +2,11 @@ import React from 'react';
 import './index.css';
 
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner"; // optional, remove if redundant
+import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import EmergencyRouteMap from '@/components/ui/EmergencyRouteMap';
-// Import the provider
 import { SidebarProvider } from '@/components/ui/sidebar-context';
 
 import NotFound from "./pages/NotFound";
@@ -20,6 +19,7 @@ import TrafficSignalsPage from "./pages/TrafficSignalsPage";
 import RouteOptimizationPage from "./pages/RouteOptimizationPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
+import MissionsPage from "./pages/MissionsPage"; // <-- Imported here
 import VehicleRegistrationForm from '@/components/ui/VehicleRegistrationForm';
 import TrafficSignalRegistrationForm from '@/components/ui/TrafficSignalRegistrationForm';
 import SignalsList from '@/components/ui/SignalsList';
@@ -50,6 +50,7 @@ const App = () => (
               <Route path="traffic-controls" element={<TrafficSignalControls />} />
               <Route path="/emergency-route" element={<EmergencyRouteMap />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/missions" element={<MissionsPage />} /> {/* <-- Registered here */}
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

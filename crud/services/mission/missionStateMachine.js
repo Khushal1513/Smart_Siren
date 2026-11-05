@@ -1,14 +1,12 @@
-'use strict';
-
 /**
  * Pure mission state machine. No database or I/O.
  *   CREATED -> ACTIVE -> ARRIVED -> CLOSED
  *   ABORTED reachable from CREATED and ACTIVE.
  */
-const { MISSION_STATUS: S } = require('../../config/constants');
+import { MISSION_STATUS as S } from '../../config/constants.js';
 
 /** Allowed-transition table. */
-const TRANSITIONS = Object.freeze({
+export const TRANSITIONS = Object.freeze({
   [S.CREATED]: Object.freeze([S.ACTIVE, S.ABORTED]),
   [S.ACTIVE]: Object.freeze([S.ARRIVED, S.ABORTED]),
   [S.ARRIVED]: Object.freeze([S.CLOSED]),
@@ -16,7 +14,7 @@ const TRANSITIONS = Object.freeze({
   [S.ABORTED]: Object.freeze([]),
 });
 
-class IllegalTransitionError extends Error {
+export class IllegalTransitionError extends Error {
   constructor(from, to) {
     super(`Illegal mission transition ${from} -> ${to}`);
     this.name = 'IllegalTransitionError';
@@ -31,7 +29,7 @@ class IllegalTransitionError extends Error {
  * @param {string} to
  * @returns {boolean}
  */
-function canTransition(from, to) {
+export function canTransition(from, to) {
   return Object.prototype.hasOwnProperty.call(TRANSITIONS, from) && TRANSITIONS[from].includes(to);
 }
 
@@ -44,7 +42,7 @@ function canTransition(from, to) {
  * @returns the same mission object
  * @throws {IllegalTransitionError}
  */
-function transition(mission, to, now = new Date()) {
+export function transition(mission, to, now = new Date()) {
   if (!mission || typeof mission !== 'object') {
     throw new TypeError('mission must be an object');
   }
@@ -68,5 +66,3 @@ function transition(mission, to, now = new Date()) {
   }
   return mission;
 }
-
-module.exports = { TRANSITIONS, canTransition, transition, IllegalTransitionError };

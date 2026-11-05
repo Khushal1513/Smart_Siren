@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TrafficCone, Search, Filter } from 'lucide-react';
@@ -24,13 +24,25 @@ const TrafficSignalsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [signals, setSignals] = useState([]);
 
-  // Load signals with useEffect
-  useEffect(() => {
-    fetch('/api/traffic-signals') // replace with your actual endpoint
-      .then((res) => res.json())
-      .then((data) => setSignals(data))
-      .catch((err) => console.error('Failed to load signals', err));
+  const loadSignals = useCallback(async () => {
+    try {
+      const response = await fetch('/api/traffic-signals');
+      if (!response.ok) {
+        throw new Error(`Failed to load traffic signals (HTTP ${response.status}).`);
+      }
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('The traffic signal API returned an invalid response.');
+      }
+      setSignals(data);
+    } catch (error) {
+      console.error('Failed to load signals:', error);
+    }
   }, []);
+
+  useEffect(() => {
+    loadSignals();
+  }, [loadSignals]);
 
   // Filter signals based on status and search query
   const filteredSignals = signals.filter(signal => {
@@ -38,7 +50,8 @@ const TrafficSignalsPage = () => {
 
     // Ensure signal.location and signal.id are defined before calling toLowerCase
     const locationMatch = signal.location && signal.location.toLowerCase().includes(searchQuery.toLowerCase());
-    const idMatch = signal.id && signal.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const signalId = signal.signalId || signal.id || signal._id || '';
+    const idMatch = signalId.toLowerCase().includes(searchQuery.toLowerCase());
 
     return statusMatch && (locationMatch || idMatch);
   });
@@ -65,7 +78,12 @@ const TrafficSignalsPage = () => {
       </div>
 
       {/* Show the form when 'isFormOpen' is true */}
-      {isFormOpen && <TrafficSignalRegistrationForm onClose={handleCloseForm} />}
+      {isFormOpen && (
+        <TrafficSignalRegistrationForm
+          onRegistered={loadSignals}
+          onClose={handleCloseForm}
+        />
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -124,8 +142,8 @@ const TrafficSignalsPage = () => {
               </thead>
               <tbody>
                 {filteredSignals.map(signal => (
-                  <tr key={signal.id}>
-                    <td className="px-4 py-2">{signal.id}</td>
+                  <tr key={signal.signalId || signal.id || signal._id}>
+                    <td className="px-4 py-2">{signal.signalId || signal.id || signal._id}</td>
                     <td className="px-4 py-2">{signal.location}</td>
                     <td className="px-4 py-2">{signal.status}</td>
                   </tr>

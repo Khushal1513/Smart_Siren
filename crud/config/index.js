@@ -1,13 +1,9 @@
-'use strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 
-const path = require('path');
-
-// dotenv is optional: if it is not installed, plain process.env is used.
-try {
-  require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-} catch (_) {
-  /* no dotenv, fall back to process.env */
-}
+const configDirectory = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(configDirectory, '..', '.env') });
 
 /**
  * Read a positive integer env var.
@@ -25,7 +21,7 @@ function intEnv(name, def) {
  */
 const config = Object.freeze({
   port: intEnv('PORT', 8000),
-  mongoUri: process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/smartsiren',
+  mongoUri: process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crud',
   aiServiceUrl: process.env.AI_SERVICE_URL || 'http://localhost:8200',
   sumoBridgeUrl: process.env.SUMO_BRIDGE_URL || 'http://localhost:8100',
   watchdogTimeoutMs: intEnv('WATCHDOG_TIMEOUT_MS', 60000),
@@ -35,7 +31,7 @@ const config = Object.freeze({
     .map((s) => s.trim())
     .filter(Boolean),
   legacyAmbulancesFile:
-    process.env.LEGACY_AMBULANCES_FILE || path.join(__dirname, '..', 'activeambulances.json'),
+    process.env.LEGACY_AMBULANCES_FILE || path.join(configDirectory, '..', 'activeambulances.json'),
 });
 
-module.exports = config;
+export default config;

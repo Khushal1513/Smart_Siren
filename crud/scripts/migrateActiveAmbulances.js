@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * One-time migration: legacy activeambulances.json -> missions collection.
  * Never deletes or modifies the JSON file. Idempotent via legacyKey (hash of each entry).
@@ -8,12 +6,14 @@
  * Default status is CLOSED, because legacy "active" entries are stale. ACTIVE missions get
  * aborted by the watchdog after WATCHDOG_TIMEOUT_MS without positions.
  */
-const fs = require('fs');
-const crypto = require('crypto');
-const mongoose = require('mongoose');
-const Mission = require('../model/Mission');
-const config = require('../config');
-const { MISSION_STATUS } = require('../config/constants');
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import mongoose from 'mongoose';
+import Mission from '../model/Mission.js';
+import config from '../config/index.js';
+import { MISSION_STATUS } from '../config/constants.js';
 
 const pick = (o, keys) => keys.map((k) => o[k]).find((v) => v !== undefined && v !== null);
 
@@ -23,7 +23,7 @@ const pick = (o, keys) => keys.map((k) => o[k]).find((v) => v !== undefined && v
  * @param {string} status target status
  * @param {Date} now
  */
-function mapLegacy(entry, status, now = new Date()) {
+export function mapLegacy(entry, status, now = new Date()) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
   const vehicleId = pick(entry, ['vehicleId', 'ambulanceId', 'vehicleNumber', 'id']);
   if (vehicleId === undefined || String(vehicleId).trim() === '') return null;
@@ -56,7 +56,7 @@ function mapLegacy(entry, status, now = new Date()) {
  * @param {{file?:string, status?:string}} [opts]
  * @returns {Promise<{total:number,created:number,skipped:number,invalid:number,note?:string}>}
  */
-async function migrate({ file = config.legacyAmbulancesFile, status = MISSION_STATUS.CLOSED } = {}) {
+export async function migrate({ file = config.legacyAmbulancesFile, status = MISSION_STATUS.CLOSED } = {}) {
   const result = { total: 0, created: 0, skipped: 0, invalid: 0 };
   if (![MISSION_STATUS.CLOSED, MISSION_STATUS.ACTIVE].includes(status)) {
     throw new Error('status must be CLOSED or ACTIVE');
@@ -106,11 +106,9 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   main().catch((err) => {
     console.error('[migrate] failed', err);
     process.exit(1);
   });
 }
-
-module.exports = { migrate, mapLegacy };

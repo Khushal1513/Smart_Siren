@@ -1,10 +1,8 @@
-'use strict';
-
 /**
  * Hand-written request validation (no zod, so no extra dependency).
  * Each validator either calls next() or responds 400 {error, details}.
  */
-const { MISSION_STATUS_VALUES, SEVERITY } = require('../config/constants');
+import { MISSION_STATUS_VALUES, SEVERITY } from '../config/constants.js';
 
 const OBJECT_ID_RE = /^[a-f\d]{24}$/i;
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -15,13 +13,13 @@ function reject(res, details) {
 }
 
 /** router.param callback: validates the :id param. */
-function validateIdParam(req, res, next, value) {
+export function validateIdParam(req, res, next, value) {
   if (!OBJECT_ID_RE.test(String(value))) return reject(res, ['id must be a 24-char hex ObjectId']);
   return next();
 }
 
 /** POST /api/missions body: { vehicleId, route?, severity? } */
-function validateCreateMission(req, res, next) {
+export function validateCreateMission(req, res, next) {
   const b = req.body;
   const errs = [];
   if (!isObj(b)) return reject(res, ['body must be a JSON object']);
@@ -55,7 +53,7 @@ function validateCreateMission(req, res, next) {
 }
 
 /** POST /api/missions/:id/position body: { lat, lng, speedKmh?, ts?, etaP50?, etaP90? } */
-function validatePosition(req, res, next) {
+export function validatePosition(req, res, next) {
   const b = req.body;
   const errs = [];
   if (!isObj(b)) return reject(res, ['body must be a JSON object']);
@@ -76,7 +74,7 @@ function validatePosition(req, res, next) {
 }
 
 /** GET /api/missions query: status?, limit?, skip? -> req.validatedQuery */
-function validateListQuery(req, res, next) {
+export function validateListQuery(req, res, next) {
   const { status, limit, skip } = req.query || {};
   const errs = [];
   const out = {};
@@ -100,7 +98,7 @@ function validateListQuery(req, res, next) {
 }
 
 /** POST /api/missions/:id/abort body: { reason? } (body optional) */
-function validateAbort(req, res, next) {
+export function validateAbort(req, res, next) {
   const b = req.body || {};
   if (b.reason !== undefined && (typeof b.reason !== 'string' || b.reason.length > 200)) {
     return reject(res, ['reason must be a string (max 200)']);
@@ -108,11 +106,3 @@ function validateAbort(req, res, next) {
   req.body = { reason: b.reason };
   return next();
 }
-
-module.exports = {
-  validateIdParam,
-  validateCreateMission,
-  validatePosition,
-  validateListQuery,
-  validateAbort,
-};

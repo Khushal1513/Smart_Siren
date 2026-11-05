@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import path from 'path';
-import tailwindcss from 'tailwindcss'; // Corrected this import
+import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
 
 // https://vitejs.dev/config/
@@ -13,7 +13,7 @@ export default defineConfig({
   css: {
     postcss: {
       plugins: [
-        tailwindcss, // Correct plugin for Tailwind CSS
+        tailwindcss,
         autoprefixer,
       ]
     },
@@ -26,5 +26,10 @@ export default defineConfig({
         secure: false,
       },
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/tests/setup.js',
   },
 });

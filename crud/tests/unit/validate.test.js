@@ -1,6 +1,5 @@
-'use strict';
-
-const v = require('../../middleware/validate');
+import { describe, expect, jest, test } from '@jest/globals';
+import * as v from '../../middleware/validate.js';
 
 function run(mw, req) {
   const res = { statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };

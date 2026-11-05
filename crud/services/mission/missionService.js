@@ -1,15 +1,13 @@
-'use strict';
-
-const Mission = require('../../model/Mission');
-const bus = require('../../realtime/eventBus');
-const { transition, IllegalTransitionError } = require('./missionStateMachine');
-const { AppError } = require('./errors');
-const {
-  MISSION_STATUS: S,
+import Mission from '../../model/Mission.js';
+import bus from '../../realtime/eventBus.js';
+import { TRANSITIONS } from './missionStateMachine.js';
+import { AppError } from './errors.js';
+import {
+  MISSION_STATUS as S,
   MISSION_STATUS_VALUES,
   MAX_POSITIONS,
   EVENTS,
-} = require('../../config/constants');
+} from '../../config/constants.js';
 
 /**
  * Build the "mission:update" payload (contract section 7).
@@ -42,23 +40,42 @@ async function load(id) {
 }
 
 /**
- * Load, transition, optionally mutate, save and emit.
+ * Atomic compare-and-set transition.
+ * 1. Read the current status.
+ * 2. Validate from -> to against the transition table.
+ * 3. Update only if the status in the database is STILL `from`.
+ * A concurrent change makes the update match nothing, which returns 409,
+ * so a mission can never skip through two states in one race.
+ *
  * @param {string} id
- * @param {string} to
- * @param {(m:object)=>void} [mutate]
+ * @param {string} to target status
+ * @param {(changes:object)=>void} [mutate] adds extra $set fields
  */
 async function applyTransition(id, to, mutate) {
-  const m = await load(id);
-  try {
-    transition(m, to);
-  } catch (err) {
-    if (err instanceof IllegalTransitionError) throw new AppError(409, err.message);
-    throw err;
+  const current = await load(id);
+  const from = current.status;
+
+  if (!(TRANSITIONS[from] || []).includes(to)) {
+    throw new AppError(409, `Illegal mission transition ${from} -> ${to}`);
   }
-  if (mutate) mutate(m);
-  await m.save();
-  emitUpdate(m);
-  return m;
+
+  const timestamp = new Date();
+  const changes = { status: to };
+  if (to === S.ACTIVE) changes.startedAt = timestamp;
+  if (to === S.ARRIVED) changes.arrivedAt = timestamp;
+  if (to === S.CLOSED || to === S.ABORTED) changes.closedAt = timestamp;
+  if (mutate) mutate(changes);
+
+  const mission = await Mission.findOneAndUpdate(
+    { _id: id, status: from },
+    { $set: changes },
+    { new: true, runValidators: true }
+  );
+  if (!mission) {
+    throw new AppError(409, `Mission ${id} changed concurrently; transition to ${to} not applied`);
+  }
+  emitUpdate(mission);
+  return mission;
 }
 
 /**
@@ -80,8 +97,8 @@ async function createMission(input = {}) {
 
 /** CREATED -> ACTIVE. Starts the watchdog grace window via lastPositionAt. */
 async function activateMission(id) {
-  return applyTransition(id, S.ACTIVE, (m) => {
-    m.lastPositionAt = new Date();
+  return applyTransition(id, S.ACTIVE, (changes) => {
+    changes.lastPositionAt = changes.startedAt;
   });
 }
 
@@ -136,8 +153,8 @@ const closeMission = (id) => applyTransition(id, S.CLOSED);
  * @param {string} [reason]
  */
 const abortMission = (id, reason = 'MANUAL') =>
-  applyTransition(id, S.ABORTED, (m) => {
-    m.abortReason = reason;
+  applyTransition(id, S.ABORTED, (changes) => {
+    changes.abortReason = reason;
   });
 
 const getMission = (id) => load(id);
@@ -154,7 +171,7 @@ async function listMissions({ status, limit = 50, skip = 0 } = {}) {
   return Mission.find(q).select('-positions').sort({ createdAt: -1 }).skip(skip).limit(limit);
 }
 
-module.exports = {
+export {
   createMission,
   activateMission,
   addPosition,

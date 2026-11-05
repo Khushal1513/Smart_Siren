@@ -1,8 +1,9 @@
 import express from 'express';
+import { createServer } from 'node:http';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
+import config from './config/index.js';
 
 // Import routes
 import userRoute from './routes/userRoute.js';
@@ -10,18 +11,19 @@ import trafficSignalRoute from './routes/trafficSignalRoute.js';
 import vehicleRoute from './routes/vehicleRoute.js';
 import ambulanceRoute from './routes/ambulanceRoute.js';
 import verifyRoute from './routes/verifyroute.js';
+import missionRoute from './routes/missionRoute.js';
 import { createArduinoRouter } from './arduino_server/arduino-server.js';
+import { attachSocketServer } from './realtime/socketServer.js';
+import { startMissionWatchdog } from './jobs/missionWatchdog.js';
 
 // Import models for initialization
 import LaneStatus from './model/LaneStatus.js';
-
-dotenv.config();
 
 const app = express();
 
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: config.corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 }));
@@ -46,6 +48,7 @@ app.use('/api/traffic-signals', trafficSignalRoute);
 app.use('/api/vehicles', vehicleRoute);
 app.use('/api/ambulance', ambulanceRoute);
 app.use('/api/verify', verifyRoute);
+app.use('/api/missions', missionRoute);
 app.use('/api/dispatch', createArduinoRouter());
 
 // Health check endpoint
@@ -53,11 +56,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
-const PORT = process.env.PORT || 8000;
-const MONGO_URL = process.env.MONGO_URI || 'mongodb://localhost:27017/crud';
+const httpServer = createServer(app);
+attachSocketServer(httpServer);
+let missionWatchdog;
 
 // MongoDB connection (removed deprecated options)
-mongoose.connect(MONGO_URL)
+mongoose.connect(config.mongoUri)
 .then(async () => {
   console.log('✅ MongoDB connected successfully');
   
@@ -72,16 +76,23 @@ mongoose.connect(MONGO_URL)
   } catch (err) {
     console.error('❌ Lane initialization error:', err.message);
   }
+
+  missionWatchdog = startMissionWatchdog();
   
   // Start server
-  app.listen(PORT, () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
-    console.log(`🌐 Health check: http://localhost:${PORT}`);
+  httpServer.listen(config.port, () => {
+    console.log(`🚀 Server is running on port ${config.port}`);
+    console.log(`🌐 Health check: http://localhost:${config.port}`);
   });
 })
 .catch((err) => {
   console.error('❌ MongoDB connection error:', err.message);
   process.exit(1);
+});
+
+httpServer.on('close', async () => {
+  missionWatchdog?.stop();
+  await mongoose.disconnect();
 });
 
 // Global error handler

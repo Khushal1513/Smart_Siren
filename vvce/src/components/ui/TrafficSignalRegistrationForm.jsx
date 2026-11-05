@@ -31,7 +31,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { TrafficCone, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-const TrafficSignalRegistrationForm = () => {
+const TrafficSignalRegistrationForm = ({ onRegistered }) => {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -85,7 +85,6 @@ const TrafficSignalRegistrationForm = () => {
     try {
       setIsSubmitting(true);
       
-      // Replace with your actual API endpoint
       const response = await fetch('/api/traffic-signals/register', {
         method: 'POST',
         headers: {
@@ -94,10 +93,11 @@ const TrafficSignalRegistrationForm = () => {
         body: JSON.stringify(formData),
       });
       
-      if (response.ok) {
+      const data = await response.json();
+      if (response.ok && data.success) {
         toast({
           title: "Registration successful",
-          description: 'Traffic signal ${formData.signalId} has been registered'
+          description: `Traffic signal ${formData.signalId} has been registered`,
         });
         setFormData({
           signalId: '',
@@ -110,11 +110,11 @@ const TrafficSignalRegistrationForm = () => {
           status: 'active'
         });
         setOpen(false);
+        onRegistered?.(data.data);
       } else {
-        const data = await response.json();
         toast({
           title: "Registration failed",
-          description: data.message || "An unknown error occurred",
+          description: data.message || `Registration failed (HTTP ${response.status}).`,
           variant: "destructive"
         });
       }

@@ -23,7 +23,8 @@ import {
   AlertCircle,
   Activity,
   Menu,
-  Siren
+  Siren,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ const menuItems = [
   { to: '/ambulances', icon: Ambulance, label: 'Ambulances' },
   { to: '/traffic-signals', icon: TrafficCone, label: 'Traffic Signals' },
   { to: '/route-optimization', icon: MapPin, label: 'Routes' },
+  { to: '/missions', icon: ShieldAlert, label: 'Missions' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
@@ -61,12 +63,10 @@ export const Sidebar = () => {
       )}
 
       <SidebarContainer
-  className={cn(
-    'fixed z-40 md:static md:translate-x-0 transform transition-transform duration-300 bg-[hsl(130,70%,93%)] border-r dark:bg-background dark:border-muted w-64',
-    sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-  )}
-
-
+        className={cn(
+          'fixed z-40 md:static md:translate-x-0 transform transition-transform duration-300 bg-[hsl(130,70%,93%)] border-r dark:bg-background dark:border-muted w-64',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
       >
         <SidebarHeader className="p-4 flex items-center space-x-2">
           <Siren className="h-6 w-6 text-emergency" />

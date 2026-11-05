@@ -1,11 +1,10 @@
-'use strict';
-
-const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
-const svc = require('../../services/mission/missionService');
-const bus = require('../../realtime/eventBus');
-const Mission = require('../../model/Mission');
-const { MAX_POSITIONS, EVENTS } = require('../../config/constants');
+import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import * as svc from '../../services/mission/missionService.js';
+import bus from '../../realtime/eventBus.js';
+import Mission from '../../model/Mission.js';
+import { MAX_POSITIONS, EVENTS } from '../../config/constants.js';
 
 let mongod;
 const events = [];
@@ -94,6 +93,41 @@ describe('missionService', () => {
     const m = await svc.createMission({ vehicleId: 'AMB-6' });
     await expect(svc.markArrived(m._id)).rejects.toMatchObject({ status: 409 });
     await expect(svc.closeMission(m._id)).rejects.toMatchObject({ status: 409 });
+  });
+
+  test('concurrent identical transitions: exactly one wins, the others get 409', async () => {
+    const mission = await svc.createMission({ vehicleId: 'AMB-CONCURRENT' });
+
+    const results = await Promise.allSettled([
+      svc.activateMission(mission._id),
+      svc.activateMission(mission._id),
+      svc.activateMission(mission._id),
+    ]);
+
+    const ok = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r) => r.status === 'rejected');
+    expect(ok).toHaveLength(1);
+    expect(failed).toHaveLength(2);
+    failed.forEach((r) => expect(r.reason.status).toBe(409));
+    expect((await svc.getMission(mission._id)).status).toBe('ACTIVE');
+  });
+
+  test('concurrent activate and abort always end in a consistent legal state', async () => {
+    const mission = await svc.createMission({ vehicleId: 'AMB-RACE' });
+
+    await Promise.allSettled([
+      svc.activateMission(mission._id),
+      svc.abortMission(mission._id, 'RACE'),
+    ]);
+
+    const final = await svc.getMission(mission._id);
+    expect(['ACTIVE', 'ABORTED']).toContain(final.status);
+    if (final.status === 'ABORTED') {
+      expect(final.closedAt).toBeInstanceOf(Date);
+      expect(final.abortReason).toBe('RACE');
+    } else {
+      expect(final.closedAt).toBeNull();
+    }
   });
 
   test('abortMission from CREATED and ACTIVE stores reason; not from ARRIVED', async () => {

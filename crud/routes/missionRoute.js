@@ -1,8 +1,6 @@
-'use strict';
-
-const express = require('express');
-const ctrl = require('../controller/missionController');
-const v = require('../middleware/validate');
+import express from 'express';
+import * as ctrl from '../controller/missionController.js';
+import * as v from '../middleware/validate.js';
 
 const router = express.Router();
 
@@ -25,4 +23,4 @@ router.use((err, req, res, next) => {
   res.status(status).json({ error: status >= 500 ? 'Internal server error' : err.message, details: err.details });
 });
 
-module.exports = router;
+export default router;

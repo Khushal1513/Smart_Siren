@@ -1,10 +1,8 @@
-'use strict';
-
-const Mission = require('../model/Mission');
-const svc = require('../services/mission/missionService');
-const bus = require('../realtime/eventBus');
-const config = require('../config');
-const { MISSION_STATUS, EVENTS } = require('../config/constants');
+import Mission from '../model/Mission.js';
+import * as svc from '../services/mission/missionService.js';
+import bus from '../realtime/eventBus.js';
+import config from '../config/index.js';
+import { MISSION_STATUS, EVENTS } from '../config/constants.js';
 
 /**
  * One watchdog pass: abort ACTIVE missions with no position for `timeoutMs`.
@@ -12,7 +10,7 @@ const { MISSION_STATUS, EVENTS } = require('../config/constants');
  * @param {{timeoutMs?:number, now?:Date}} [opts]
  * @returns {Promise<number>} number of missions aborted
  */
-async function tick({ timeoutMs = config.watchdogTimeoutMs, now = new Date() } = {}) {
+export async function tick({ timeoutMs = config.watchdogTimeoutMs, now = new Date() } = {}) {
   const cutoff = new Date(now.getTime() - timeoutMs);
   const stale = await Mission.find({
     status: MISSION_STATUS.ACTIVE,
@@ -37,7 +35,7 @@ async function tick({ timeoutMs = config.watchdogTimeoutMs, now = new Date() } =
  * @param {{intervalMs?:number, timeoutMs?:number}} [opts]
  * @returns {{stop:()=>void, tick:Function}}
  */
-function startMissionWatchdog({ intervalMs = config.watchdogIntervalMs, timeoutMs = config.watchdogTimeoutMs } = {}) {
+export function startMissionWatchdog({ intervalMs = config.watchdogIntervalMs, timeoutMs = config.watchdogTimeoutMs } = {}) {
   let running = false;
   const timer = setInterval(async () => {
     if (running) return; // skip overlapping passes
@@ -55,5 +53,3 @@ function startMissionWatchdog({ intervalMs = config.watchdogIntervalMs, timeoutM
   console.log(`[watchdog] started (every ${intervalMs}ms, timeout ${timeoutMs}ms)`);
   return { stop: () => clearInterval(timer), tick: () => tick({ timeoutMs }) };
 }
-
-module.exports = { startMissionWatchdog, tick };

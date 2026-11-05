@@ -1,7 +1,5 @@
-'use strict';
-
 /** Error carrying an HTTP status so controllers/handlers can map it. */
-class AppError extends Error {
+export class AppError extends Error {
   /**
    * @param {number} status HTTP status code
    * @param {string} message
@@ -14,5 +12,3 @@ class AppError extends Error {
     this.details = details;
   }
 }
-
-module.exports = { AppError };

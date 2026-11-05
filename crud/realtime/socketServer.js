@@ -1,8 +1,9 @@
-'use strict';
+import { createRequire } from 'node:module';
+import bus from './eventBus.js';
+import config from '../config/index.js';
+import { SOCKET_FORWARDED_EVENTS } from '../config/constants.js';
 
-const bus = require('./eventBus');
-const config = require('../config');
-const { SOCKET_FORWARDED_EVENTS } = require('../config/constants');
+const require = createRequire(import.meta.url);
 
 /**
  * Attach Socket.IO to an existing http.Server and forward event-bus events
@@ -14,7 +15,7 @@ const { SOCKET_FORWARDED_EVENTS } = require('../config/constants');
  * @param {{corsOrigins?: string[]}} [opts]
  * @returns {import('socket.io').Server|null}
  */
-function attachSocketServer(httpServer, opts = {}) {
+export function attachSocketServer(httpServer, opts = {}) {
   let Server;
   try {
     ({ Server } = require('socket.io'));
@@ -45,5 +46,3 @@ function attachSocketServer(httpServer, opts = {}) {
   io.detachBus = detach;
   return io;
 }
-
-module.exports = { attachSocketServer };

@@ -1,7 +1,11 @@
-'use strict';
-
-const { TRANSITIONS, canTransition, transition, IllegalTransitionError } = require('../../services/mission/missionStateMachine');
-const { MISSION_STATUS_VALUES } = require('../../config/constants');
+import { describe, expect, test } from '@jest/globals';
+import {
+  TRANSITIONS,
+  canTransition,
+  transition,
+  IllegalTransitionError,
+} from '../../services/mission/missionStateMachine.js';
+import { MISSION_STATUS_VALUES } from '../../config/constants.js';
 
 const LEGAL = new Set([
   'CREATED->ACTIVE',

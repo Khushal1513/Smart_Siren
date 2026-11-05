@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock } from 'lucide-react';
 
 const getStatusClass = (status) => {
-  switch (status) {
+  switch (status?.toLowerCase()) {
     case 'green':
       return 'signal-status-green';
     case 'yellow':
@@ -11,49 +10,51 @@ const getStatusClass = (status) => {
     case 'red':
       return 'signal-status-red';
     default:
-      return '';
+      return 'rounded-full border px-3 py-1 text-xs font-medium capitalize';
   }
 };
 
 export const TrafficSignalsList = () => {
-  // This would come from an API in a real application
-  const signals = [
-    {
-      id: 'TS-001',
-      location: 'Main St & 5th Ave',
-      status: 'green',
-      controlledBy: 'Ambulance #103',
-      nextChange: '35s',
-    },
-    {
-      id: 'TS-008',
-      location: 'Market St & 3rd Ave',
-      status: 'green',
-      controlledBy: 'Ambulance #103',
-      nextChange: '25s',
-    },
-    {
-      id: 'TS-015',
-      location: 'Park Ave & 12th St',
-      status: 'green',
-      controlledBy: 'Ambulance #105',
-      nextChange: '40s',
-    },
-    {
-      id: 'TS-022',
-      location: 'Broadway & 9th St',
-      status: 'red',
-      controlledBy: null,
-      nextChange: '15s',
-    },
-    {
-      id: 'TS-031',
-      location: 'West End & River Rd',
-      status: 'yellow',
-      controlledBy: 'Ambulance #108',
-      nextChange: '5s',
-    },
-  ];
+  const [signals, setSignals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadSignals = useCallback(async (isMounted) => {
+    try {
+      const response = await fetch('/api/traffic-signals');
+      if (!response.ok) {
+        throw new Error(`Failed to load traffic signals (HTTP ${response.status}).`);
+      }
+
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('The traffic signal API returned an invalid response.');
+      }
+
+      if (isMounted()) {
+        setSignals(data);
+        setError('');
+      }
+    } catch (loadError) {
+      if (isMounted()) {
+        setError(loadError.message || 'Failed to load traffic signals.');
+      }
+    } finally {
+      if (isMounted()) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const isMounted = () => active;
+    loadSignals(isMounted);
+
+    const refreshTimer = window.setInterval(() => loadSignals(isMounted), 10000);
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, [loadSignals]);
 
   return (
     <Card>
@@ -62,27 +63,38 @@ export const TrafficSignalsList = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {signals.map((signal) => (
-            <div key={signal.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{signal.location}</span>
-                  <span className={getStatusClass(signal.status)}>{signal.status.toUpperCase()}</span>
+          {loading && signals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Loading traffic signals...</p>
+          ) : error && signals.length === 0 ? (
+            <p role="alert" className="text-sm text-destructive">{error}</p>
+          ) : signals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No traffic signals have been registered.</p>
+          ) : (
+            <>
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+              {signals.map((signal) => (
+                <div
+                  key={signal._id || signal.signalId}
+                  className="flex items-center justify-between gap-3 border-b pb-4 last:border-0 last:pb-0"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-medium">
+                        {signal.location || [signal.intersection, signal.area, signal.city].filter(Boolean).join(', ') || 'Location unavailable'}
+                      </span>
+                      <span className={getStatusClass(signal.status)}>
+                        {(signal.status || 'unknown').toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Signal ID: {signal.signalId || 'Unavailable'}
+                      {signal.signalType ? ` · ${signal.signalType}` : ''}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  {signal.controlledBy ? (
-                    <span className="text-emergency">Controlled by {signal.controlledBy}</span>
-                  ) : (
-                    <span>Regular operation</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1 text-sm">
-                <Clock className="h-3.5 w-3.5" />
-                <span>Next change: {signal.nextChange}</span>
-              </div>
-            </div>
-          ))}
+              ))}
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

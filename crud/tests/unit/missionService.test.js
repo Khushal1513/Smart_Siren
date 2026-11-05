@@ -41,6 +41,7 @@ describe('missionService', () => {
   test('createMission persists explicit simulation configuration for activation', async () => {
     const simulationConfig = {
       mode: 'DEMO',
+      vehicleSource: 'REGISTERED',
       originEdgeId: 'S1_S2',
       destinationEdgeId: 'S3_S4',
     };

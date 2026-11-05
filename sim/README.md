@@ -57,11 +57,14 @@ The checked workspace currently has SUMO **1.28.0** at `C:\Program Files (x86)\S
 4. From the repository root, build and check the synthetic network using the same interpreter:
 
    ```powershell
+   $env:SUMO_HOME = 'C:\Program Files (x86)\SUMO'
+   $env:SUMO_BINARY = 'C:\Program Files (x86)\SUMO\bin\sumo.exe'
+   $env:NETCONVERT_BINARY = 'C:\Program Files (x86)\SUMO\bin\netconvert.exe'
    & 'C:\Python313\python.exe' sim\build_scenario.py --build-only
    & 'C:\Python313\python.exe' sim\publisher.py --check
    ```
 
-   `--build-only` requires `netconvert`; `--check` requires `sumo`, `netconvert`, and the matching Python bindings. The checked workspace passes this preflight and generates `sim\scenarios\generated\corridor.sumocfg`.
+   The standalone Python commands do not read `crud\.env`, so set the SUMO variables in the current PowerShell session as shown. The backend itself loads `crud\.env` before it starts the child. `--build-only` requires `netconvert`; `--check` requires `sumo`, `netconvert`, and the matching Python bindings. The checked workspace passes this preflight and generates `sim\scenarios\generated\corridor.sumocfg`.
 
 ## Start the application
 
@@ -81,7 +84,7 @@ The checked workspace currently has SUMO **1.28.0** at `C:\Program Files (x86)\S
    ```
 
 4. Register a vehicle using the existing vehicle registration page.
-5. Register a test vehicle and use the exact generated `VEH-...` `vehicleId` (not a plate or `AMB-SIH-*` demo ID).
+5. Register a test vehicle and use its exact generated `VEH-...` `vehicleId` (not a plate).
 6. Open **Missions**, create a new mission with that registered ID, choose origin `S1_S2` and fixed destination `S3_S4`, then select it. This route is connected through the synthetic detour because `S2_S3` is configured blocked.
 7. Activate once. The existing frontend button calls `POST /api/missions/:id/activate`; the backend returns `{ data: mission, simulation: run }` after a `RUNNING` update, then the UI navigates to `/simulation/:missionId`. Updates arrive through Socket.IO `simulation:update` and are also persisted for `GET /api/simulations/:missionId`.
 
@@ -92,7 +95,7 @@ The backend runs one managed headless SUMO child process and uses one persisted 
 - **`sumo.exe` or `netconvert.exe` not found:** verify the binaries under `C:\Program Files (x86)\SUMO\bin` and check `SUMO_BINARY`/`NETCONVERT_BINARY` in `crud\.env`.
 - **Bad `SUMO_HOME`:** it must be the installation root `C:\Program Files (x86)\SUMO` (the parent of `bin` and `tools`), not the `bin` directory.
 - **Wrong Python/TraCI environment:** confirm backend `SIMULATION_PYTHON` is `C:\Python313\python.exe`; use that same executable for pip and imports. TraCI/sumolib versions should match SUMO.
-- **Invalid vehicle or mission:** activate only a `CREATED` mission whose `vehicleId` exactly matches a registered `Vehicle.vehicleId`. The seeded `AMB-SIH-*` missions are not registered vehicles and must not be used for this test.
+- **Invalid vehicle or mission:** a `CREATED` mission normally requires a `vehicleId` exactly matching a registered `Vehicle.vehicleId`. A synthetic-only mission can instead explicitly set `simulationConfig.vehicleSource` to `SYNTHETIC_DEMO`; its ambulance identity is simulated and must not match a registered vehicle. The seeded `AMB-SIH-*` rows are explicitly marked this way and are not real/registered ambulances.
 - **Invalid route edges:** use known connected edges; for this demo use `S1_S2` → `S3_S4`. Unknown, blocked endpoint, or disconnected routes fail instead of substituting a destination.
 - **Simulation process failure:** inspect backend terminal output for `[simulation]`/`[missions]` errors and query `GET /api/simulations/:missionId`; a failed run is persisted as `FAILED` and is not silently restarted. Create a new mission for a new run.
 
@@ -107,13 +110,14 @@ Create a mission through the existing `POST /api/missions` endpoint:
   "route": [],
   "simulationConfig": {
     "mode": "DEMO",
+    "vehicleSource": "REGISTERED",
     "originEdgeId": "S1_S2",
     "destinationEdgeId": "S3_S4"
   }
 }
 ```
 
-Activation uses the existing `POST /api/missions/:id/activate` endpoint. Before changing the mission, the backend validates that the mission exists, its `vehicleId` matches a registered `Vehicle.vehicleId`, its simulation mode/edges are valid, and SUMO/network prerequisites pass. On success it returns:
+Activation uses the existing `POST /api/missions/:id/activate` endpoint. Before changing the mission, the backend validates that the mission exists, its vehicle source is explicitly registered or synthetic-demo, its simulation mode/edges are valid, and SUMO/network prerequisites pass. `REGISTERED` requires a matching `Vehicle.vehicleId`; `SYNTHETIC_DEMO` permits an unregistered synthetic identity and rejects an ID that collides with a registered vehicle. On success it returns:
 
 ```json
 {
@@ -124,7 +128,11 @@ Activation uses the existing `POST /api/missions/:id/activate` endpoint. Before 
 
 Each mission has at most one persisted `SimulationRun`. Repeated activation requests return that run when it is starting, running, or complete. Failed/cancelled runs are not silently restarted; create a new mission for a new run.
 
+On backend startup, the simulation manager queries MongoDB for `ACTIVE` missions and loads any mission that has valid demo simulation configuration and no prior run. It also creates a one-time synthetic replay for each `ARRIVED` mission. Each replay receives a `SIM-<source mission ID>` vehicle ID, leaves the original mission unchanged, and stores the source mission ID on its simulation run. If an ARRIVED mission has no usable demo endpoints, the replay uses the clearly synthetic `S1_S2` to `S3_S4` corridor. Replays use the same rerouter and demo road restriction as ordinary SUMO runs; they are synthetic playback, not live ambulance telemetry. A source mission is replayed only once automatically across backend restarts. From `/simulation/live`, the operator may explicitly replay the ARRIVED missions again; an already-running replay is reused rather than duplicated.
+
 - `GET /api/simulations/config` returns the public synthetic topology, restrictions, and data-source label.
+- `GET /api/simulations` returns the ARRIVED-mission replay runs for the live simulation screen.
+- `POST /api/simulations/replay-arrived` explicitly starts fresh replay runs for ARRIVED missions that do not already have an active run.
 - `GET /api/simulations/:missionId` returns the persisted run state.
 - `simulation:update` is an outbound Socket.IO event for browser clients. It includes the mission/run/vehicle IDs, ordered sequence, status, SUMO-local position, current route and fixed destination edge, speed/heading, synthetic traffic/restrictions, conflict state, source, and timestamp. It is not an inbound GPS or traffic feed.
 - `mission:update` remains the mission lifecycle event. The simulation runner does not write synthetic positions into `Mission.positions`, which is reserved for the existing latitude/longitude position API.

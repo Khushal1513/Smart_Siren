@@ -96,6 +96,7 @@ export function MissionCreateForm({ onSubmit, loading, externalError }) {
         route: formattedRoute,
         simulationConfig: {
           mode: 'DEMO',
+          vehicleSource: 'REGISTERED',
           originEdgeId: simulationConfig.originEdgeId,
           destinationEdgeId: simulationConfig.destinationEdgeId,
         },

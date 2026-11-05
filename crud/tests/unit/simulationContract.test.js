@@ -23,6 +23,7 @@ describe('simulation contract', () => {
     status: 'CREATED',
     simulationConfig: {
       mode: 'DEMO',
+      vehicleSource: 'REGISTERED',
       originEdgeId: 'S1_S2',
       destinationEdgeId: 'S3_S4',
     },
@@ -42,6 +43,16 @@ describe('simulation contract', () => {
     }, vehicle, networkConfig), 501);
   });
 
+  test('allows an unregistered vehicle only when explicitly marked synthetic demo', () => {
+    const syntheticMission = {
+      ...mission,
+      vehicleId: 'AMB-SIH-010',
+      simulationConfig: { ...mission.simulationConfig, vehicleSource: 'SYNTHETIC_DEMO' },
+    };
+    expect(validateMissionSimulation(syntheticMission, null, networkConfig)).toEqual(syntheticMission.simulationConfig);
+    expectStatus(() => validateMissionSimulation(syntheticMission, vehicle, networkConfig), 422);
+  });
+
   test('rejects unknown or restricted endpoints instead of substituting a destination', () => {
     expectStatus(() => validateMissionSimulation({
       ...mission,
@@ -53,8 +64,13 @@ describe('simulation contract', () => {
     }, vehicle, networkConfig), 422);
   });
 
+  test('accepts an explicitly configured ACTIVE mission for simulation loading', () => {
+    expect(validateMissionSimulation({ ...mission, status: 'ACTIVE' }, vehicle, networkConfig))
+      .toEqual(mission.simulationConfig);
+  });
+
   test('rejects already active missions and labels the returned topology synthetic', () => {
-    expectStatus(() => validateMissionSimulation({ ...mission, status: 'ACTIVE' }, vehicle, networkConfig), 409);
+    expectStatus(() => validateMissionSimulation({ ...mission, status: 'ARRIVED' }, vehicle, networkConfig), 409);
 
     expect(publicSimulationConfig(networkConfig)).toMatchObject({
       mode: 'DEMO',

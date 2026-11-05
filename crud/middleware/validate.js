@@ -51,8 +51,11 @@ export function validateCreateMission(req, res, next) {
     if (!isObj(b.simulationConfig)) {
       errs.push('simulationConfig must be an object');
     } else {
-      const { mode, originEdgeId, destinationEdgeId } = b.simulationConfig;
+      const { mode, vehicleSource = 'REGISTERED', originEdgeId, destinationEdgeId } = b.simulationConfig;
       if (!['DEMO', 'LIVE'].includes(mode)) errs.push('simulationConfig.mode must be DEMO or LIVE');
+      if (!['REGISTERED', 'SYNTHETIC_DEMO'].includes(vehicleSource)) {
+        errs.push('simulationConfig.vehicleSource must be REGISTERED or SYNTHETIC_DEMO');
+      }
       if (typeof originEdgeId !== 'string' || !originEdgeId.trim()) {
         errs.push('simulationConfig.originEdgeId must be a non-empty string');
       }
@@ -61,6 +64,7 @@ export function validateCreateMission(req, res, next) {
       }
       simulationConfig = {
         mode,
+        vehicleSource,
         originEdgeId: typeof originEdgeId === 'string' ? originEdgeId.trim() : originEdgeId,
         destinationEdgeId: typeof destinationEdgeId === 'string' ? destinationEdgeId.trim() : destinationEdgeId,
       };

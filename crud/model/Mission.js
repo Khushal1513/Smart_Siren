@@ -22,6 +22,11 @@ const positionSchema = new mongoose.Schema(
 const simulationConfigSchema = new mongoose.Schema(
   {
     mode: { type: String, enum: ['DEMO', 'LIVE'], required: true },
+    vehicleSource: {
+      type: String,
+      enum: ['REGISTERED', 'SYNTHETIC_DEMO'],
+      default: 'REGISTERED',
+    },
     originEdgeId: { type: String, trim: true, default: null },
     destinationEdgeId: { type: String, trim: true, default: null },
   },

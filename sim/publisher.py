@@ -245,6 +245,8 @@ def run_server():
         "--step-length", str(config["stepLengthSeconds"]),
         "--seed", str(config["randomSeed"]),
         "--no-warnings", "true",
+        "--no-step-log", "true",
+        "--duration-log.disable", "true",
     ])
     commands = queue.Queue()
     threading.Thread(target=read_commands, args=(commands,), daemon=True).start()

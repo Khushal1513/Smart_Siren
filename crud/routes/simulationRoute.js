@@ -1,11 +1,34 @@
 import express from 'express';
-import { getSimulationConfiguration, getSimulationRun } from '../services/simulation/simulationManager.js';
+import {
+  getSimulationConfiguration,
+  getSimulationRun,
+  listArrivedMissionReplays,
+  replayArrivedMissions,
+} from '../services/simulation/simulationManager.js';
 import { validateIdParam } from '../middleware/validate.js';
 
 const router = express.Router();
 
+router.get('/', async (req, res, next) => {
+  try {
+    const simulations = await listArrivedMissionReplays();
+    res.json({ data: simulations });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/config', (req, res) => {
   res.json({ data: getSimulationConfiguration() });
+});
+
+router.post('/replay-arrived', async (req, res, next) => {
+  try {
+    const simulations = await replayArrivedMissions(true);
+    res.json({ data: simulations });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.get('/:missionId', (req, res, next) => {

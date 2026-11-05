@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useMissions } from '../hooks/useMissions.js';
 import { useMissionSocket } from '../hooks/useMissionSocket.js';
 import { useMissionActions } from '../hooks/useMissionActions.js';
@@ -81,6 +82,9 @@ export default function MissionsPage() {
           <p className="text-sm text-muted-foreground">Manage preemption missions, live telemetry, and state transitions.</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link to="/simulation/live" className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+            Live Simulation
+          </Link>
           <ConnectionIndicator status={connection} />
           <button
             onClick={refresh}

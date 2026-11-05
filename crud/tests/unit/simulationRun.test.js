@@ -37,6 +37,47 @@ describe('simulation run persistence', () => {
     await expect(SimulationRun.create({ ...run, runId: 'run-two' })).rejects.toMatchObject({ code: 11000 });
   });
 
+  test('allows ordinary runs without a historical source mission ID', async () => {
+    const base = {
+      vehicleId: 'VEH-ORDINARY',
+      mode: 'DEMO',
+      status: 'STARTING',
+      originEdgeId: 'S1_S2',
+      destinationEdgeId: 'S3_S4',
+    };
+    await SimulationRun.create({
+      ...base,
+      runId: 'ordinary-one',
+      missionId: new mongoose.Types.ObjectId(),
+    });
+    const secondRun = await SimulationRun.create({
+      ...base,
+      runId: 'ordinary-two',
+      missionId: new mongoose.Types.ObjectId(),
+    });
+    expect(secondRun.sourceMissionId).toBeUndefined();
+  });
+
+  test('allows only one replay record per source mission', async () => {
+    const sourceMissionId = new mongoose.Types.ObjectId();
+    const replay = {
+      runId: 'replay-one',
+      missionId: new mongoose.Types.ObjectId(),
+      sourceMissionId,
+      vehicleId: `SIM-${sourceMissionId}`,
+      mode: 'DEMO',
+      status: 'COMPLETED',
+      originEdgeId: 'S1_S2',
+      destinationEdgeId: 'S3_S4',
+    };
+    await SimulationRun.create(replay);
+    await expect(SimulationRun.create({
+      ...replay,
+      runId: 'replay-two',
+      missionId: new mongoose.Types.ObjectId(),
+    })).rejects.toMatchObject({ code: 11000 });
+  });
+
   test('persists ordered telemetry and ignores stale runner sequences', async () => {
     const missionId = new mongoose.Types.ObjectId();
     await SimulationRun.create({

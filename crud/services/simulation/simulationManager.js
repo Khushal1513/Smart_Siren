@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import mongoose from 'mongoose';
 import Mission from '../../model/Mission.js';
 import Vehicle from '../../model/Vehicle.js';
 import SimulationRun from '../../model/SimulationRun.js';
@@ -25,6 +26,7 @@ let runnerReady = null;
 let shuttingDown = false;
 let busListenerAttached = false;
 const activationPromises = new Map();
+const arrivedReplayPromises = new Map();
 const startWaiters = new Map();
 
 function publicRun(run) {
@@ -324,7 +326,9 @@ async function startMissionSimulationOnce(missionId) {
 
   let activatedMission;
   try {
-    activatedMission = await missionService.activateMission(mission._id);
+    activatedMission = mission.status === 'CREATED'
+      ? await missionService.activateMission(mission._id)
+      : mission;
     await startRunner();
     const started = waitForStart(run.runId);
     await sendCommand({
@@ -354,10 +358,139 @@ async function startMissionSimulationOnce(missionId) {
   }
 }
 
+async function replayArrivedMissionOnce(sourceMission, force = false) {
+  const existingReplay = await SimulationRun.findOne({ sourceMissionId: sourceMission._id });
+  const activeReplay = existingReplay && ['STARTING', 'RUNNING'].includes(existingReplay.status)
+    ? existingReplay
+    : null;
+  if (activeReplay) return activeReplay;
+  if (!force && existingReplay) return existingReplay;
+
+  const savedConfig = sourceMission.simulationConfig?.toObject?.() || sourceMission.simulationConfig;
+  const simulationConfig = savedConfig?.mode === 'DEMO'
+    && savedConfig.originEdgeId
+    && savedConfig.destinationEdgeId
+    ? savedConfig
+    : {
+      mode: 'DEMO',
+      vehicleSource: 'SYNTHETIC_DEMO',
+      originEdgeId: 'S1_S2',
+      destinationEdgeId: 'S3_S4',
+    };
+  const replayMission = {
+    ...sourceMission.toObject(),
+    _id: new mongoose.Types.ObjectId(),
+    vehicleId: `SIM-${sourceMission._id}`,
+    status: 'ACTIVE',
+    simulationConfig: {
+      ...simulationConfig,
+      mode: 'DEMO',
+      vehicleSource: 'SYNTHETIC_DEMO',
+    },
+  };
+  const validatedConfig = validateMissionSimulation(replayMission, null, networkConfig);
+  await preflight();
+
+  const runId = randomUUID();
+  const run = existingReplay
+    ? await SimulationRun.findByIdAndUpdate(
+      existingReplay._id,
+      {
+        $set: {
+          runId,
+          missionId: replayMission._id,
+          vehicleId: replayMission.vehicleId,
+          mode: 'DEMO',
+          source: 'SYNTHETIC_DEMO',
+          status: 'STARTING',
+          originEdgeId: validatedConfig.originEdgeId,
+          destinationEdgeId: validatedConfig.destinationEdgeId,
+          route: [],
+          currentEdgeId: null,
+          position: null,
+          speedKmh: null,
+          headingDegrees: null,
+          simulationTimeSeconds: 0,
+          traffic: [],
+          restrictions: [],
+          signalState: null,
+          conflictState: null,
+          rerouteReason: null,
+          error: null,
+          lastSequence: -1,
+          lastUpdateAt: null,
+          startedAt: null,
+          completedAt: null,
+        },
+      },
+      { new: true, runValidators: true }
+    )
+    : await SimulationRun.create({
+      runId,
+      missionId: replayMission._id,
+      sourceMissionId: sourceMission._id,
+      vehicleId: replayMission.vehicleId,
+      mode: 'DEMO',
+      status: 'STARTING',
+      originEdgeId: validatedConfig.originEdgeId,
+      destinationEdgeId: validatedConfig.destinationEdgeId,
+    });
+
+  try {
+    await startRunner();
+    const started = waitForStart(run.runId);
+    await sendCommand({
+      type: 'start',
+      runId: run.runId,
+      missionId: String(replayMission._id),
+      sourceMissionId: String(sourceMission._id),
+      vehicleId: replayMission.vehicleId,
+      severity: replayMission.severity,
+      originEdgeId: validatedConfig.originEdgeId,
+      destinationEdgeId: validatedConfig.destinationEdgeId,
+    });
+    return await started;
+  } catch (error) {
+    await SimulationRun.findByIdAndUpdate(run._id, {
+      $set: { status: 'FAILED', error: error.message, completedAt: new Date(), lastUpdateAt: new Date() },
+    });
+    resolveStartWaiter(run.runId, error);
+    throw error instanceof AppError ? error : new AppError(503, `Arrived-mission replay failed: ${error.message}`);
+  }
+}
+
+async function replayArrivedMission(sourceMission, force = false) {
+  const missionId = String(sourceMission._id);
+  const existingPromise = arrivedReplayPromises.get(missionId);
+  if (existingPromise) return existingPromise;
+  const promise = replayArrivedMissionOnce(sourceMission, force);
+  arrivedReplayPromises.set(missionId, promise);
+  try {
+    return await promise;
+  } finally {
+    arrivedReplayPromises.delete(missionId);
+  }
+}
+
 async function getSimulationRun(missionId) {
   const run = await SimulationRun.findOne({ missionId });
   if (!run) throw new AppError(404, `No simulation run exists for mission ${missionId}`);
   return run;
+}
+
+async function listArrivedMissionReplays() {
+  return SimulationRun.find({ sourceMissionId: { $exists: true, $ne: null } })
+    .sort({ createdAt: -1 })
+    .limit(100);
+}
+
+async function replayArrivedMissions(force = false) {
+  const missions = await Mission.find({ status: 'ARRIVED' }).sort({ arrivedAt: 1, _id: 1 });
+  const runs = [];
+  for (const mission of missions) {
+    runs.push(await replayArrivedMission(mission, force));
+  }
+  return runs;
 }
 
 async function stopRunForMission(missionId, reason) {
@@ -422,6 +555,23 @@ export async function initializeSimulationManager() {
     );
     if (failed) bus.emit(EVENTS.SIMULATION_UPDATE, publicRun(failed));
   }
+
+  const activeMissions = await Mission.find({ status: 'ACTIVE' });
+  for (const mission of activeMissions) {
+    try {
+      await startMissionSimulation(String(mission._id));
+    } catch (error) {
+      console.error(
+        `[simulation] active mission ${mission._id} (${mission.vehicleId}) was not loaded: ${error.message}`
+      );
+    }
+  }
+
+  try {
+    await replayArrivedMissions();
+  } catch (error) {
+    console.error(`[simulation] ARRIVED mission replay initialization failed: ${error.message}`);
+  }
 }
 
 export async function shutdownSimulationManager() {
@@ -450,4 +600,4 @@ export function getSimulationConfiguration() {
   return publicSimulationConfig(networkConfig);
 }
 
-export { getSimulationRun, startMissionSimulation };
+export { getSimulationRun, listArrivedMissionReplays, replayArrivedMissions, startMissionSimulation };

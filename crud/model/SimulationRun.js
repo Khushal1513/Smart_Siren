@@ -18,6 +18,13 @@ const simulationRunSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    sourceMissionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Mission',
+      default: undefined,
+      unique: true,
+      sparse: true,
+    },
     vehicleId: { type: String, required: true, trim: true },
     mode: { type: String, enum: ['DEMO'], required: true, default: 'DEMO' },
     source: { type: String, required: true, default: 'SYNTHETIC_DEMO' },

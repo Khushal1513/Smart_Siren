@@ -42,6 +42,7 @@ describe('MissionCreateForm', () => {
           severity: 3,
           simulationConfig: {
             mode: 'DEMO',
+            vehicleSource: 'REGISTERED',
             originEdgeId: 'S1_S2',
             destinationEdgeId: 'S3_S4',
           },

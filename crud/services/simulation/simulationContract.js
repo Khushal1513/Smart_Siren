@@ -1,11 +1,18 @@
 import { AppError } from '../mission/errors.js';
 
 export function validateMissionSimulation(mission, vehicle, networkConfig) {
-  if (!vehicle) {
+  const vehicleSource = mission.simulationConfig?.vehicleSource || 'REGISTERED';
+  if (!['REGISTERED', 'SYNTHETIC_DEMO'].includes(vehicleSource)) {
+    throw new AppError(422, `Unknown simulation vehicle source: ${vehicleSource}`);
+  }
+  if (vehicleSource === 'REGISTERED' && !vehicle) {
     throw new AppError(422, `Registered vehicle ${mission.vehicleId} was not found`);
   }
-  if (mission.status !== 'CREATED') {
-    throw new AppError(409, `Simulation activation requires a CREATED mission; current status is ${mission.status}`);
+  if (vehicleSource === 'SYNTHETIC_DEMO' && vehicle) {
+    throw new AppError(422, 'Synthetic demo vehicle IDs must not match a registered vehicle');
+  }
+  if (!['CREATED', 'ACTIVE'].includes(mission.status)) {
+    throw new AppError(409, `Simulation requires a CREATED or ACTIVE mission; current status is ${mission.status}`);
   }
 
   const simulationConfig = mission.simulationConfig;

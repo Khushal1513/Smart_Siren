@@ -10,6 +10,7 @@ import {
   markArrived as apiArrive,
   closeMission as apiClose,
   abortMission as apiAbort,
+  deleteMission as apiDelete,
 } from '../services/missionApi.js';
 import { missionActions } from '../store/missionStore.js';
 
@@ -53,5 +54,9 @@ export function useMissionActions() {
     markArrived: (id) => wrapAction('arrive', () => apiArrive(id)),
     closeMission: (id) => wrapAction('close', () => apiClose(id)),
     abortMission: (id, reason) => wrapAction('abort', () => apiAbort(id, reason)),
+    deleteMission: (id) => wrapAction('delete', async () => {
+      await apiDelete(id);
+      missionActions.removeMission(id);
+    }),
   };
 }

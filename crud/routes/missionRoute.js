@@ -8,6 +8,7 @@ router.param('id', v.validateIdParam);
 
 router.post('/', v.validateCreateMission, ctrl.create);
 router.get('/', v.validateListQuery, ctrl.list);
+router.delete('/:id', ctrl.remove);
 router.get('/:id', ctrl.get);
 router.post('/:id/activate', ctrl.activate);
 router.post('/:id/position', v.validatePosition, ctrl.addPosition);

@@ -44,7 +44,7 @@ export function PositionSimulator({ mission, onAddPosition, onSendBurst }) {
             etaP90: eta90,
             ts: new Date().toISOString(),
           });
-        } catch (e) {
+        } catch {
           setIsRunning(false);
         }
       }, intervalSec * 1000);
@@ -74,7 +74,7 @@ export function PositionSimulator({ mission, onAddPosition, onSendBurst }) {
             min={1}
             max={10}
             value={intervalSec}
-            onChange={(e) => setIntervalSec(Number(e.target.value))}
+            onChange={(e) => setIntervalSec(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
             className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-foreground"
           />
         </div>
@@ -85,7 +85,7 @@ export function PositionSimulator({ mission, onAddPosition, onSendBurst }) {
             min={0}
             max={200}
             value={speedKmh}
-            onChange={(e) => setSpeedKmh(Number(e.target.value))}
+            onChange={(e) => setSpeedKmh(Math.min(200, Math.max(0, Number(e.target.value) || 0)))}
             className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-foreground"
           />
         </div>

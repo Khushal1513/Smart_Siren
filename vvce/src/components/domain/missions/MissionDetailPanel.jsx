@@ -10,7 +10,7 @@ import { MissionStatusBadge } from './MissionStatusBadge.jsx';
  * @param {Object} props
  * @param {Object} props.mission - Selected mission object
  */
-export function MissionDetailPanel({ mission }) {
+export function MissionDetailPanel({ mission, detailsLoading = false }) {
   if (!mission) {
     return (
       <div className="bg-card p-6 rounded-lg border shadow-sm text-center text-muted-foreground">
@@ -86,7 +86,9 @@ export function MissionDetailPanel({ mission }) {
       <div>
         <h4 className="text-sm font-medium text-foreground mb-1">Position Trail Preview</h4>
         <div className="bg-background border rounded-md p-2 h-32 flex items-center justify-center relative overflow-hidden">
-          {positions.length < 2 ? (
+          {detailsLoading ? (
+            <span className="text-xs text-muted-foreground">Loading mission details...</span>
+          ) : positions.length < 2 ? (
             <span className="text-xs text-muted-foreground">Waiting for position data...</span>
           ) : (
             <svg className="w-full h-full" viewBox="0 0 220 100">

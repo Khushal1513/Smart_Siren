@@ -1,6 +1,6 @@
 /**
  * @file ConnectionIndicator.jsx
- * @description Status dot and label for connection status (connected, disconnected, polling, mock).
+ * @description Status dot and label for connection status.
  */
 import React from 'react';
 
@@ -8,7 +8,6 @@ const STATUS_CONFIG = {
   connected: { color: 'bg-green-500', label: 'Connected' },
   disconnected: { color: 'bg-red-500', label: 'Disconnected' },
   polling: { color: 'bg-amber-500', label: 'Polling Fallback' },
-  mock: { color: 'bg-blue-500', label: 'Mock Mode' },
 };
 
 /**

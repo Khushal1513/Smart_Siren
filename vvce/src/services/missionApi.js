@@ -1,11 +1,8 @@
 /**
  * @file missionApi.js
- * @description Mission REST API client that delegates to mock if VITE_USE_MOCK is true.
+ * @description Mission REST API client backed by the MongoDB API.
  */
 import { apiClient } from './apiClient.js';
-import * as mockApi from './mockMissionApi.js';
-
-const useMock = () => import.meta.env.VITE_USE_MOCK === 'true';
 
 /**
  * Creates a new emergency mission.
@@ -13,7 +10,6 @@ const useMock = () => import.meta.env.VITE_USE_MOCK === 'true';
  * @returns {Promise<Object>} Created mission object
  */
 export async function createMission(payload) {
-  if (useMock()) return mockApi.createMission(payload);
   const res = await apiClient('/api/missions', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -27,7 +23,6 @@ export async function createMission(payload) {
  * @returns {Promise<{data: Array, count: number}>} Missions list and count
  */
 export async function listMissions(params = {}) {
-  if (useMock()) return mockApi.listMissions(params);
   const searchParams = new URLSearchParams();
   if (params.status) searchParams.set('status', params.status);
   if (params.limit !== undefined) searchParams.set('limit', params.limit);
@@ -45,7 +40,6 @@ export async function listMissions(params = {}) {
  * @returns {Promise<Object>} Mission object
  */
 export async function getMission(id) {
-  if (useMock()) return mockApi.getMission(id);
   const res = await apiClient(`/api/missions/${id}`);
   return res.data;
 }
@@ -56,7 +50,6 @@ export async function getMission(id) {
  * @returns {Promise<Object>} Updated mission object
  */
 export async function activateMission(id) {
-  if (useMock()) return mockApi.activateMission(id);
   const res = await apiClient(`/api/missions/${id}/activate`, { method: 'POST' });
   return res.data;
 }
@@ -68,7 +61,6 @@ export async function activateMission(id) {
  * @returns {Promise<Object>} Updated mission object
  */
 export async function addPosition(id, positionPayload) {
-  if (useMock()) return mockApi.addPosition(id, positionPayload);
   const res = await apiClient(`/api/missions/${id}/position`, {
     method: 'POST',
     body: JSON.stringify(positionPayload),
@@ -82,7 +74,6 @@ export async function addPosition(id, positionPayload) {
  * @returns {Promise<Object>} Updated mission object
  */
 export async function markArrived(id) {
-  if (useMock()) return mockApi.markArrived(id);
   const res = await apiClient(`/api/missions/${id}/arrive`, { method: 'POST' });
   return res.data;
 }
@@ -93,7 +84,6 @@ export async function markArrived(id) {
  * @returns {Promise<Object>} Updated mission object
  */
 export async function closeMission(id) {
-  if (useMock()) return mockApi.closeMission(id);
   const res = await apiClient(`/api/missions/${id}/close`, { method: 'POST' });
   return res.data;
 }
@@ -105,10 +95,19 @@ export async function closeMission(id) {
  * @returns {Promise<Object>} Updated mission object
  */
 export async function abortMission(id, reason) {
-  if (useMock()) return mockApi.abortMission(id, reason);
   const res = await apiClient(`/api/missions/${id}/abort`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
   });
+  return res.data;
+}
+
+/**
+ * Deletes a mission from persistent storage.
+ * @param {string} id - Mission ID
+ * @returns {Promise<Object>} Delete result
+ */
+export async function deleteMission(id) {
+  const res = await apiClient(`/api/missions/${id}`, { method: 'DELETE' });
   return res.data;
 }

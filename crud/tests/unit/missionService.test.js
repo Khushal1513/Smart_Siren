@@ -150,6 +150,16 @@ describe('missionService', () => {
     await expect(svc.getMission(new mongoose.Types.ObjectId())).rejects.toMatchObject({ status: 404 });
   });
 
+  test('deleteMission removes a persisted mission and returns 404 when missing', async () => {
+    const mission = await svc.createMission({ vehicleId: 'AMB-DELETE' });
+
+    const deleted = await svc.deleteMission(mission._id);
+
+    expect(String(deleted._id)).toBe(String(mission._id));
+    await expect(svc.getMission(mission._id)).rejects.toMatchObject({ status: 404 });
+    await expect(svc.deleteMission(mission._id)).rejects.toMatchObject({ status: 404 });
+  });
+
   test('listMissions filters by status and rejects invalid status', async () => {
     const a = await svc.createMission({ vehicleId: 'L-1' });
     await svc.createMission({ vehicleId: 'L-2' });

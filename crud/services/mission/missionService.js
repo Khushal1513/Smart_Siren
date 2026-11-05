@@ -159,6 +159,12 @@ const abortMission = (id, reason = 'MANUAL') =>
 
 const getMission = (id) => load(id);
 
+async function deleteMission(id) {
+  const mission = await Mission.findByIdAndDelete(id);
+  if (!mission) throw new AppError(404, `Mission ${id} not found`);
+  return mission;
+}
+
 /**
  * @param {{status?:string, limit?:number, skip?:number}} [filter]
  */
@@ -179,6 +185,7 @@ export {
   closeMission,
   abortMission,
   getMission,
+  deleteMission,
   listMissions,
   toUpdatePayload,
 };

@@ -21,20 +21,12 @@ export function useMissions() {
 
   const refresh = useCallback(async () => {
     missionActions.setLoading(true);
-    let isMounted = true;
     try {
       const res = await listMissions({ status: filterStatus || undefined });
-      if (isMounted) {
-        missionActions.setMissions(res.data);
-      }
+      missionActions.setMissions(res.data);
     } catch (err) {
-      if (isMounted) {
-        missionActions.setError(err.message);
-      }
+      missionActions.setError(err.message);
     }
-    return () => {
-      isMounted = false;
-    };
   }, [filterStatus]);
 
   useEffect(() => {

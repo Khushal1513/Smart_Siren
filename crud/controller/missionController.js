@@ -34,3 +34,8 @@ export const list = asyncHandler(async (req, res) => {
 export const get = asyncHandler(async (req, res) => {
   res.json({ data: await svc.getMission(req.params.id) });
 });
+
+export const remove = asyncHandler(async (req, res) => {
+  const mission = await svc.deleteMission(req.params.id);
+  res.json({ data: { id: String(mission._id) }, message: 'Mission deleted successfully' });
+});

@@ -50,4 +50,32 @@ describe('missionStore', () => {
     expect(updated.positions.length).toBe(1);
     expect(updated.etaP50).toBe(100);
   });
+
+  it('preserves loaded positions when list refreshes omit them', () => {
+    const mission = {
+      _id: '1',
+      vehicleId: 'AMB-1',
+      status: 'ACTIVE',
+      positions: [{ lat: 12, lng: 77, speedKmh: 50, ts: '2025-01-01T00:00:00.000Z' }],
+    };
+    missionActions.setMissions([mission]);
+
+    missionActions.setMissions([{ _id: '1', vehicleId: 'AMB-1', status: 'ACTIVE' }]);
+
+    expect(missionStore.getState().missionsById['1'].positions).toEqual(mission.positions);
+  });
+
+  it('removes a deleted mission and clears its selection', () => {
+    missionActions.setMissions([
+      { _id: '1', vehicleId: 'AMB-1', status: 'CREATED' },
+      { _id: '2', vehicleId: 'AMB-2', status: 'ACTIVE' },
+    ]);
+    missionActions.selectMission('1');
+
+    missionActions.removeMission('1');
+
+    expect(missionStore.getState().missionsById['1']).toBeUndefined();
+    expect(missionStore.getState().order).toEqual(['2']);
+    expect(missionStore.getState().selectedId).toBeNull();
+  });
 });

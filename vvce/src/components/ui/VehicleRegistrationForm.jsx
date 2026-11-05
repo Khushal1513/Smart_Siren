@@ -31,7 +31,7 @@ const VehicleRegistrationForm = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/vehicles/register', {
+      const response = await fetch('/api/vehicles/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -48,7 +48,7 @@ const VehicleRegistrationForm = () => {
       } else {
         setMessage({ type: 'error', text: data.message || 'Registration failed. Please try again.' });
       }
-    } catch (error) {
+    } catch {
       setMessage({ type: 'error', text: 'Network error. Please check if the server is running.' });
     } finally {
       setIsSubmitting(false);

@@ -2,7 +2,7 @@
  * @file MissionsPage.jsx
  * @description Main Missions test console page combining all domain components.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMissions } from '../hooks/useMissions.js';
 import { useMissionSocket } from '../hooks/useMissionSocket.js';
 import { useMissionActions } from '../hooks/useMissionActions.js';
@@ -14,13 +14,14 @@ import { MissionDetailPanel } from '../components/domain/missions/MissionDetailP
 import { PositionSimulator } from '../components/domain/missions/PositionSimulator.jsx';
 import { LiveEventLog } from '../components/domain/missions/LiveEventLog.jsx';
 import { ConnectionIndicator } from '../components/domain/missions/ConnectionIndicator.jsx';
+import { getMission } from '../services/missionApi.js';
 
 /**
  * MissionsPage component.
  */
 export default function MissionsPage() {
   useMissionSocket();
-  const { missions, loading, refresh } = useMissions();
+  const { missions, loading, error, refresh } = useMissions();
   const selectedId = missionStore.useStore((s) => s.selectedId);
   const filterStatus = missionStore.useStore((s) => s.filterStatus);
   const connection = missionStore.useStore((s) => s.connection);
@@ -28,7 +29,30 @@ export default function MissionsPage() {
   const missionsById = missionStore.useStore((s) => s.missionsById);
 
   const selectedMission = selectedId ? missionsById[selectedId] : null;
+  const hasSelectedMissionDetails = Boolean(selectedMission && Array.isArray(selectedMission.positions));
+  const [detailError, setDetailError] = useState(null);
   const actions = useMissionActions();
+
+  useEffect(() => {
+    if (!selectedId || hasSelectedMissionDetails) {
+      setDetailError(null);
+      return undefined;
+    }
+
+    let active = true;
+    setDetailError(null);
+    getMission(selectedId)
+      .then((mission) => {
+        if (active) missionActions.upsertMission(mission);
+      })
+      .catch((loadError) => {
+        if (active) setDetailError(loadError.message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedId, hasSelectedMissionDetails]);
 
   const handleSendBurst = async () => {
     if (!selectedMission) return;
@@ -40,24 +64,15 @@ export default function MissionsPage() {
           speedKmh: 60,
           ts: new Date().toISOString(),
         });
-      } catch (e) {
+      } catch {
         break;
       }
     }
     refresh();
   };
 
-  const isMock = import.meta.env.VITE_USE_MOCK === 'true' || connection === 'mock';
-
   return (
     <div className="space-y-6 pb-12">
-      {isMock && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg flex justify-between items-center text-sm">
-          <span>Simulation Mock Mode is active. All CRUD operations and socket events run in-memory.</span>
-          <span className="font-semibold">VITE_USE_MOCK=true</span>
-        </div>
-      )}
-
       <div className="flex flex-wrap justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Emergency Missions Console</h1>
@@ -74,6 +89,12 @@ export default function MissionsPage() {
         </div>
       </div>
 
+      {(error || detailError || (actions.actionError && actions.actionError.action !== 'create')) && (
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {detailError || actions.actionError?.message || error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <MissionTable
@@ -84,7 +105,10 @@ export default function MissionsPage() {
             onFilterChange={(st) => missionActions.setFilter(st)}
             loading={loading}
           />
-          <MissionDetailPanel mission={selectedMission} />
+          <MissionDetailPanel
+            mission={selectedMission}
+            detailsLoading={Boolean(selectedMission && !hasSelectedMissionDetails)}
+          />
         </div>
 
         <div className="space-y-6">

@@ -1,10 +1,9 @@
 /**
  * @file socketClient.js
- * @description Lazy singleton Socket.IO client with fallback to mock event emitter and connection status reporting.
+ * @description Lazy singleton Socket.IO client with connection status reporting.
  */
-import * as mockMissionApi from './mockMissionApi.js';
-
 let socketInstance = null;
+let socketInitialization = null;
 const statusListeners = new Set();
 const eventListeners = new Map();
 let currentStatus = 'disconnected';
@@ -56,20 +55,16 @@ function dispatchEvent(event, data) {
 }
 
 /**
- * Initializes the Socket.IO or mock listener.
+ * Initializes the Socket.IO listener.
  */
-export async function initSocket() {
-  if (socketInstance) return;
-
-  const useMock = import.meta.env.VITE_USE_MOCK === 'true';
-  if (useMock) {
-    setStatus('mock');
-    mockMissionApi.subscribe((event, payload) => {
-      dispatchEvent(event, payload);
-    });
-    return;
+export function initSocket() {
+  if (!socketInitialization) {
+    socketInitialization = initializeSocket();
   }
+  return socketInitialization;
+}
 
+async function initializeSocket() {
   const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 
   try {
@@ -99,10 +94,7 @@ export async function initSocket() {
       });
     });
   } catch (err) {
-    console.warn('Socket.IO initialization failed, using mock events fallback:', err);
-    setStatus('mock');
-    mockMissionApi.subscribe((event, payload) => {
-      dispatchEvent(event, payload);
-    });
+    console.error('Socket.IO initialization failed; mission REST API remains available:', err);
+    setStatus('polling');
   }
 }

@@ -20,10 +20,18 @@ export const missionStore = createStore(() => ({
  */
 export const missionActions = {
   setMissions(missions) {
+    const previous = missionStore.getState().missionsById;
     const missionsById = {};
     const order = [];
     missions.forEach((m) => {
-      missionsById[m._id] = m;
+      const previousMission = previous[m._id];
+      missionsById[m._id] = previousMission
+        ? {
+            ...previousMission,
+            ...m,
+            positions: Array.isArray(m.positions) ? m.positions : previousMission.positions,
+          }
+        : m;
       order.push(m._id);
     });
     missionStore.setState({ missionsById, order, loading: false, error: null });
@@ -38,6 +46,17 @@ export const missionActions = {
       order.unshift(mission._id);
     }
     missionStore.setState({ missionsById, order });
+  },
+
+  removeMission(id) {
+    const state = missionStore.getState();
+    const missionsById = { ...state.missionsById };
+    delete missionsById[id];
+    missionStore.setState({
+      missionsById,
+      order: state.order.filter((missionId) => missionId !== id),
+      selectedId: state.selectedId === id ? null : state.selectedId,
+    });
   },
 
   applySocketUpdate(payload) {

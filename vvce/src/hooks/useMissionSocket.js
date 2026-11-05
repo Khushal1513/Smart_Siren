@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react';
 import { initSocket, subscribeEvent, onStatus } from '../services/socketClient.js';
-import { missionActions } from '../store/missionStore.js';
+import { missionActions, missionStore } from '../store/missionStore.js';
 import { listMissions, getMission } from '../services/missionApi.js';
 
 /**
@@ -27,10 +27,13 @@ export function useMissionSocket() {
       });
 
       if (eventName === 'mission:update') {
+        const isUnknownMission = !missionStore.getState().missionsById[payload.missionId];
         missionActions.applySocketUpdate(payload);
-        // If mission unknown in store, fetch full record
-        const state = missionActions;
-        // fetch if needed
+        if (isUnknownMission) {
+          getMission(payload.missionId)
+            .then((mission) => missionActions.upsertMission(mission))
+            .catch((error) => console.error('[mission] failed to load socket-updated mission', error));
+        }
       }
     };
 
@@ -46,8 +49,8 @@ export function useMissionSocket() {
         try {
           const res = await listMissions();
           missionActions.setMissions(res.data);
-        } catch (e) {
-          // ignore poll error
+        } catch (error) {
+          missionActions.setError(error.message);
         }
       }
     }, 3000);
@@ -62,5 +65,3 @@ export function useMissionSocket() {
     };
   }, []);
 }
-
-import { missionStore } from '../store/missionStore.js';

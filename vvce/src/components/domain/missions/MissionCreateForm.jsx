@@ -56,8 +56,8 @@ export function MissionCreateForm({ onSubmit, loading, externalError }) {
       setVehicleId('');
       setSeverity(3);
       setRoute([{ signalId: '', distanceAlongRouteM: 0 }]);
-    } catch (err) {
-      // Handled by parent error state
+    } catch {
+      // The parent displays the action error.
     }
   };
 

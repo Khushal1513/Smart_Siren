@@ -3,7 +3,8 @@
  * @description Action buttons for mission lifecycle state transitions with legal check and illegal bypass toggle.
  */
 import React, { useState } from 'react';
-import { canTransition, allowedActions } from './missionTransitions.js';
+import { canTransition } from './missionTransitions.js';
+import { Trash2 } from 'lucide-react';
 
 /**
  * MissionActions component.
@@ -25,17 +26,15 @@ export function MissionActions({ mission, actions, loading }) {
   }
 
   const currentStatus = mission.status;
-  const allowed = allowedActions(currentStatus);
-
-  const handleAction = async (actionName, targetStatus, apiFn) => {
+  const handleAction = async (targetStatus, apiFn) => {
     if (!bypassIllegal && !canTransition(currentStatus, targetStatus)) {
       alert(`Illegal transition from ${currentStatus} to ${targetStatus}`);
       return;
     }
     try {
       await apiFn();
-    } catch (err) {
-      // Error handled by parent/action hook
+    } catch {
+      // The action hook exposes the error to the page.
     }
   };
 
@@ -57,7 +56,7 @@ export function MissionActions({ mission, actions, loading }) {
       <div className="flex flex-wrap gap-2">
         <button
           disabled={loading || (!bypassIllegal && !canTransition(currentStatus, 'ACTIVE'))}
-          onClick={() => handleAction('activate', 'ACTIVE', () => actions.activateMission(mission._id))}
+          onClick={() => handleAction('ACTIVE', () => actions.activateMission(mission._id))}
           className="bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-2 rounded-md text-sm font-medium disabled:opacity-40"
         >
           Activate
@@ -65,7 +64,7 @@ export function MissionActions({ mission, actions, loading }) {
 
         <button
           disabled={loading || (!bypassIllegal && !canTransition(currentStatus, 'ARRIVED'))}
-          onClick={() => handleAction('arrive', 'ARRIVED', () => actions.markArrived(mission._id))}
+          onClick={() => handleAction('ARRIVED', () => actions.markArrived(mission._id))}
           className="bg-teal-600 text-white hover:bg-teal-700 px-3 py-2 rounded-md text-sm font-medium disabled:opacity-40"
         >
           Mark Arrived
@@ -73,7 +72,7 @@ export function MissionActions({ mission, actions, loading }) {
 
         <button
           disabled={loading || (!bypassIllegal && !canTransition(currentStatus, 'CLOSED'))}
-          onClick={() => handleAction('close', 'CLOSED', () => actions.closeMission(mission._id))}
+          onClick={() => handleAction('CLOSED', () => actions.closeMission(mission._id))}
           className="bg-gray-600 text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium disabled:opacity-40"
         >
           Close
@@ -92,12 +91,31 @@ export function MissionActions({ mission, actions, loading }) {
           />
           <button
             disabled={loading || (!bypassIllegal && !canTransition(currentStatus, 'ABORTED'))}
-            onClick={() => handleAction('abort', 'ABORTED', () => actions.abortMission(mission._id, abortReason))}
+            onClick={() => handleAction('ABORTED', () => actions.abortMission(mission._id, abortReason))}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 px-3 py-2 rounded-md text-sm font-medium disabled:opacity-40"
           >
             Abort
           </button>
         </div>
+      </div>
+
+      <div className="border-t pt-3">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={async () => {
+            if (!window.confirm(`Permanently delete the mission for ${mission.vehicleId}?`)) return;
+            try {
+              await actions.deleteMission(mission._id);
+            } catch {
+              // The action hook exposes the error to the page.
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-40"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          Delete Mission
+        </button>
       </div>
     </div>
   );

@@ -3,8 +3,8 @@
  * @description Unit tests for MissionActions component button enabling/disabling rules.
  */
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MissionActions } from '../../components/domain/missions/MissionActions.jsx';
 
@@ -31,5 +31,25 @@ describe('MissionActions', () => {
     expect(screen.getByRole('button', { name: /mark arrived/i })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: /^abort$/i })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: /^close$/i })).toBeDisabled();
+  });
+
+  it('deletes the selected mission after confirmation', async () => {
+    const deleteMission = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const mission = { _id: '1', vehicleId: 'AMB-1', status: 'CREATED' };
+
+    render(
+      <MissionActions
+        mission={mission}
+        actions={{ deleteMission }}
+        loading={false}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /delete mission/i }));
+
+    await waitFor(() => expect(deleteMission).toHaveBeenCalledWith('1'));
+    expect(window.confirm).toHaveBeenCalledWith('Permanently delete the mission for AMB-1?');
+    vi.restoreAllMocks();
   });
 });

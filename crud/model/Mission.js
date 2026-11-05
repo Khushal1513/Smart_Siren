@@ -19,6 +19,15 @@ const positionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const simulationConfigSchema = new mongoose.Schema(
+  {
+    mode: { type: String, enum: ['DEMO', 'LIVE'], required: true },
+    originEdgeId: { type: String, trim: true, default: null },
+    destinationEdgeId: { type: String, trim: true, default: null },
+  },
+  { _id: false }
+);
+
 /**
  * Mission: one ambulance run. Collection name: "missions".
  * positions is capped to the last 500 entries by missionService.addPosition ($slice).
@@ -39,6 +48,7 @@ const missionSchema = new mongoose.Schema(
     lastPositionAt: { type: Date, default: null }, // used by the watchdog
     abortReason: { type: String, default: null },
     legacyKey: { type: String, default: undefined }, // migration idempotency key
+    simulationConfig: { type: simulationConfigSchema, default: null },
   },
   { timestamps: true }
 );

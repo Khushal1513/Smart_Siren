@@ -31,6 +31,7 @@ export const EVENTS = Object.freeze({
   SIGNAL_UPDATE: 'signal:update',
   PREEMPTION_PLAN: 'preemption:plan',
   METRICS_UPDATE: 'metrics:update',
+  SIMULATION_UPDATE: 'simulation:update',
   /** Internal only, not forwarded to sockets. */
   MISSION_WATCHDOG_ABORT: 'mission:watchdog',
 });
@@ -41,4 +42,5 @@ export const SOCKET_FORWARDED_EVENTS = Object.freeze([
   EVENTS.SIGNAL_UPDATE,
   EVENTS.PREEMPTION_PLAN,
   EVENTS.METRICS_UPDATE,
+  EVENTS.SIMULATION_UPDATE,
 ]);

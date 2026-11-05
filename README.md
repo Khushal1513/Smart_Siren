@@ -18,10 +18,12 @@ From the repository root, open a terminal and run:
 ```powershell
 cd crud
 npm install
-node server.js
+npm start
 ```
 
-The API listens on port `8000` by default and connects to `mongodb://localhost:27017/crud`. To change these values, create `crud/.env`:
+The API listens on port `8000` by default, connects to `mongodb://127.0.0.1:27017/crud`, and runs `crud/index.js`. `crud/server.js` is a separate legacy serial-only server; it does not start the Mongo-backed API. Do not run both servers on the same port.
+
+The backend reads optional values from `crud/.env`:
 
 ```env
 MONGO_URI=mongodb://localhost:27017/crud
@@ -29,7 +31,7 @@ PORT=8000
 ARDUINO_PORT=COM15
 ```
 
-The dashboard uses this API. `npm start` in `crud/` runs `index.js`, a separate serial-dispatch server that also uses port `8000`; do not run it at the same time as `server.js`.
+The dashboard uses this API. The mounted serial dispatch router is an optional hardware path and is not the SUMO simulation.
 
 ### Start the dashboard
 
@@ -53,9 +55,15 @@ VITE_GOOGLE_MAPS_API_KEY=your_restricted_key
 
 Restart Vite after changing environment variables. Browser-based keys are visible to users, so restrict the key in Google Cloud to the required API and allowed website referrers. Do not commit the key.
 
+### SUMO mission simulation
+
+The repository includes an offline, explicitly synthetic SUMO corridor under `sim/`. It uses local metre coordinates, synthetic background traffic, and a demo closure; it is not mapped to real roads and has no live TomTom, GPS, or physical signal input. Install SUMO and matching TraCI, configure `SUMO_HOME` (or `SUMO_BINARY` and `NETCONVERT_BINARY`), then follow [sim/README.md](./sim/README.md) for Windows setup, API contracts, and the mission-activation workflow.
+
+Optional backend setting names are `SIMULATION_PYTHON` and `SIMULATION_STARTUP_TIMEOUT_MS`. Credentials are not needed for this offline demo. Live traffic/ambulance modes are not implemented.
+
 ## File-by-file guide
 
-This inventory covers the 128 files tracked in the repository. Installed dependencies, build output, and other generated files are excluded.
+This inventory describes the application files in the repository. Installed dependencies, build output, and other generated files are excluded.
 
 ### Repository root
 
@@ -69,6 +77,7 @@ This inventory covers the 128 files tracked in the repository. Installed depende
 | File | Purpose |
 |---|---|
 | `crud/README.md` | Detailed backend file guide describing each backend file, its role, and its importance. |
+| `crud/.env.example` | Safe template for backend environment variable names and local SUMO/Python paths; contains no credentials. |
 | `crud/activeambulances.json` | Sample lane/ambulance status data in JSON format. |
 | `crud/arduino_server/arduino-server.js` | Creates the `/api/dispatch` router and sends validated lane commands to the configured Arduino serial port. |
 | `crud/check-routes-conflicts.js` | Scans route files and reports duplicate HTTP method/path definitions. |
@@ -79,9 +88,11 @@ This inventory covers the 128 files tracked in the repository. Installed depende
 | `crud/controller/vehicleController.js` | Registers, lists, retrieves, updates, and deletes vehicles. |
 | `crud/controller/verifycontroller.js` | Verifies an engine-number and vehicle-number pair against stored ambulance records. |
 | `crud/debug-routes.js` | Imports route modules to check that they load and can be mounted in Express. |
-| `crud/index.js` | Standalone serial-dispatch Express server; `npm start` runs this file. |
+| `crud/index.js` | Main MongoDB API server; `npm start` runs this file. |
 | `crud/model/ActiveAmbulance.js` | Mongoose schema for an active ambulance, its assigned lane, status, and dispatch lifecycle timestamps. |
 | `crud/model/LaneStatus.js` | Mongoose schema and helpers for lane status, location, traffic density, emergency state, and signal overrides. |
+| `crud/model/Mission.js` | Mongoose schema for persisted mission records, telemetry, and optional demo SUMO endpoints. |
+| `crud/model/SimulationRun.js` | Mongoose schema for one idempotent simulation run per mission and its updates. |
 | `crud/model/Vehicle.js` | Mongoose vehicle-registration schema, validation, ID generation, and registration helpers. |
 | `crud/model/ambulanceModel.js` | Mongoose schema for an ambulance identifier, active flag, location, and update time. |
 | `crud/model/trafficSignalModel.js` | Mongoose schema for a traffic signal's ID, location, and status. |
@@ -93,14 +104,31 @@ This inventory covers the 128 files tracked in the repository. Installed depende
 | `crud/package.json` | Backend package metadata, dependencies, and the `npm start` script. |
 | `crud/routes/ambulanceRoute.js` | Defines routes for emergency verification and creating/listing active ambulances. |
 | `crud/routes/ambulanceRoutes.js` | Defines an alternate set of ambulance routes for activation and active-ambulance listing. |
+| `crud/routes/missionRoute.js` | Exposes the Mongo-backed mission lifecycle; activation starts a validated SUMO run. |
+| `crud/routes/simulationRoute.js` | Exposes synthetic simulation configuration and persisted run state. |
 | `crud/routes/trafficSignalRoute.js` | Maps traffic-signal registration, listing, and status updates to controller functions. |
 | `crud/routes/trigger-route.js` | Maps ambulance verification, activation, and listing routes to trigger controllers. |
 | `crud/routes/userRoute.js` | Defines user CRUD route paths, currently connected to placeholder response handlers. |
 | `crud/routes/vehicleRoute.js` | Defines vehicle registration, list, lookup, update, delete, and health-check routes. |
 | `crud/routes/verifyroute.js` | Verifies engine/vehicle pairs and ambulance IDs against registered vehicles. |
-| `crud/server.js` | Main MongoDB-backed API server; mounts API routes, health check, and Arduino dispatch router. |
+| `crud/server.js` | Separate serial-only server; it does not connect to MongoDB or host the dashboard APIs. |
+| `crud/services/simulation/simulationContract.js` | Validates canonical vehicle identity and explicit demo simulation settings. |
+| `crud/services/simulation/simulationManager.js` | Manages the headless TraCI child, per-mission run idempotency, events, and cleanup. |
 | `crud/test-ports.js` | Lists serial ports available on the current machine. |
 | `crud/utils/asyncHandler.js` | Wraps an async Express handler and forwards rejected promises to Express error handling. |
+
+### SUMO demo: `sim/`
+
+| File | Purpose |
+|---|---|
+| `sim/README.md` | Windows setup, synthetic/demo limitations, and API/event contracts. |
+| `sim/requirements.txt` | SUMO 1.28.0-matched TraCI and sumolib Python dependencies. |
+| `sim/config/manual_values.json` | Synthetic local-coordinate corridor, traffic, background flow, and configured closure. |
+| `sim/build_scenario.py` | Generates SUMO network and configuration inputs and invokes `netconvert`. |
+| `sim/publisher.py` | Backend-managed headless TraCI runner and timestamped run publisher. |
+| `sim/routing.py` | Traffic-weighted route planner that preserves the destination and avoids blocked demo edges. |
+| `sim/conflicts.py` | Deterministic severity/ETA priority and hold-release helpers. |
+| `sim/tests/test_routing.py` | SUMO-independent tests for rerouting, destination preservation, and conflict handling. |
 
 ### Dashboard: `vvce/`
 
@@ -195,8 +223,11 @@ This inventory covers the 128 files tracked in the repository. Installed depende
 | `vvce/src/pages/Index.jsx` | Alternate landing/index page component. |
 | `vvce/src/pages/NotFound.jsx` | Page displayed for unknown routes. |
 | `vvce/src/pages/RouteOptimizationPage.jsx` | Emergency route optimization page. |
+| `vvce/src/pages/MissionsPage.jsx` | Mongo-backed mission operations and activation screen; starts/navigates to simulation only after backend confirmation. |
+| `vvce/src/pages/SimulationPage.jsx` | Shows a mission's synthetic SUMO run, route, position, restrictions, conflicts, and freshness/connectivity state. |
 | `vvce/src/pages/SettingsPage.jsx` | Application settings page. |
 | `vvce/src/pages/TrafficSignalsPage.jsx` | Traffic-signal management page. |
+| `vvce/src/services/simulationApi.js` | Reads simulation configuration and persisted run state from the backend. |
 | `vvce/tailwind.config.js` | Tailwind CSS theme and content-scan configuration. |
 | `vvce/vite.config.js` | Vite configuration, `@` source alias, PostCSS integration, and API proxy. |
 
@@ -210,4 +241,4 @@ npm run build
 npm run lint
 ```
 
-From `crud/`, use `node server.js` to run the dashboard API. `npm start` runs the separate `index.js` serial-dispatch server.
+From `crud/`, use `npm start` to run the dashboard API. `node server.js` runs the separate serial-only server.

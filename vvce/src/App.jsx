@@ -20,6 +20,7 @@ import RouteOptimizationPage from "./pages/RouteOptimizationPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SettingsPage from "./pages/SettingsPage";
 import MissionsPage from "./pages/MissionsPage"; // <-- Imported here
+import SimulationPage from "./pages/SimulationPage";
 import VehicleRegistrationForm from '@/components/ui/VehicleRegistrationForm';
 import TrafficSignalRegistrationForm from '@/components/ui/TrafficSignalRegistrationForm';
 import SignalsList from '@/components/ui/SignalsList';
@@ -51,6 +52,7 @@ const App = () => (
               <Route path="/emergency-route" element={<EmergencyRouteMap />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/missions" element={<MissionsPage />} /> {/* <-- Registered here */}
+              <Route path="/simulation/:missionId" element={<SimulationPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

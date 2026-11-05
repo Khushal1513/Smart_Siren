@@ -3,6 +3,7 @@
  * @description Main Missions test console page combining all domain components.
  */
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMissions } from '../hooks/useMissions.js';
 import { useMissionSocket } from '../hooks/useMissionSocket.js';
 import { useMissionActions } from '../hooks/useMissionActions.js';
@@ -20,6 +21,7 @@ import { getMission } from '../services/missionApi.js';
  * MissionsPage component.
  */
 export default function MissionsPage() {
+  const navigate = useNavigate();
   useMissionSocket();
   const { missions, loading, error, refresh } = useMissions();
   const selectedId = missionStore.useStore((s) => s.selectedId);
@@ -121,7 +123,16 @@ export default function MissionsPage() {
             externalError={actions.actionError?.action === 'create' ? actions.actionError : null}
           />
 
-          <MissionActions mission={selectedMission} actions={actions} loading={Boolean(actions.pendingAction)} />
+          <MissionActions
+            mission={selectedMission}
+            actions={actions}
+            loading={Boolean(actions.pendingAction)}
+            onActivated={({ simulation }) => {
+              if (['RUNNING', 'COMPLETED'].includes(simulation.status)) {
+                navigate(`/simulation/${selectedMission._id}`);
+              }
+            }}
+          />
 
           <PositionSimulator
             mission={selectedMission}

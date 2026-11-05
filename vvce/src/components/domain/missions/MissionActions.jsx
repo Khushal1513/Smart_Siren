@@ -12,8 +12,9 @@ import { Trash2 } from 'lucide-react';
  * @param {Object} props.mission - Current mission object
  * @param {Object} props.actions - Action dispatch functions
  * @param {boolean} props.loading - Loading state
+ * @param {(result: Object) => void} [props.onActivated] - Called after mission and simulation startup succeed
  */
-export function MissionActions({ mission, actions, loading }) {
+export function MissionActions({ mission, actions, loading, onActivated }) {
   const [abortReason, setAbortReason] = useState('');
   const [bypassIllegal, setBypassIllegal] = useState(false);
 
@@ -32,7 +33,10 @@ export function MissionActions({ mission, actions, loading }) {
       return;
     }
     try {
-      await apiFn();
+      const result = await apiFn();
+      if (targetStatus === 'ACTIVE' && result?.simulation && onActivated) {
+        onActivated(result);
+      }
     } catch {
       // The action hook exposes the error to the page.
     }

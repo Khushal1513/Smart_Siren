@@ -2,6 +2,19 @@
 
 This document is a standalone orientation guide for a person or AI assistant that has not seen this repository before. It describes the purpose, architecture, current implementation, and every tracked project file in the `crud/` and `vvce/` applications. File descriptions are based on the source code, not just filenames.
 
+## Current project state (verified 2026-11-05)
+
+This section describes the active implementation and takes precedence over older file notes below if they conflict.
+
+- The repository contains two separate applications: `crud/` is the Node/Express/Mongoose API and `vvce/` is the React/Vite user interface. They communicate over HTTP; they are not merged into one application or one package.
+- The main backend process is `crud/index.js`. It connects to MongoDB, mounts the APIs, attaches Socket.IO to the same HTTP server, and starts the mission watchdog. The frontend development server runs separately and proxies `/api` requests to the backend.
+- Missions are stored in the MongoDB `missions` collection. The `/api/missions` API supports create, list, detail, lifecycle transitions, positions, and deletion. Mission status is persisted, so a browser refresh does not erase a mission.
+- The dashboard's **Emergency Ambulances** card is currently a mission view: it lists `CREATED` and `ACTIVE` missions, lets an operator select one to inspect its mission details, and shares the mission store/realtime updates with the Missions page. The dashboard's Active Ambulances statistic counts `ACTIVE` missions. This does not read the separate ambulance-registration or lane-assignment collections.
+- The dashboard's **Traffic Signal Control** card reads registered signal records from `GET /api/traffic-signals`, shows location/ID/type/status, and refreshes the list periodically. A registered signal's `active` status means its record is available/active in the registry; it does not prove a physical signal is green or controlled by an ambulance.
+- The `/ambulances` page still uses fixed simulation rows and lane IDs for the Proteus/Arduino demonstration. Do not silently replace those simulation lanes with mission or database data: a general vehicle mission does not necessarily have a physical lane assignment.
+- At the latest local demo-data check, MongoDB contained eleven signal records (the pre-existing record plus `MSR-DEMO-02` through `MSR-DEMO-11`) and ten missions `AMB-SIH-001` through `AMB-SIH-010`, all in `CREATED`. These are demo records in the configured database, not seeded by code or guaranteed to exist in another environment. Confirm before relying on them.
+- Some metrics, route/analytics screens, emergency activation UI, and lane data remain simulated or hard-coded. The app is a demonstration/prototype, not a fully integrated emergency dispatch or certified traffic-control system.
+
 ## What the project is for
 
 Smart Siren is a prototype emergency-response traffic-management system. Its intended users are emergency operators who need to verify an ambulance, declare an emergency, see the vehicle and surrounding traffic infrastructure, and request a route or signal/lane change to reduce delays.
@@ -11,8 +24,9 @@ The project aims to address delays caused by congested roads and intersections. 
 - A browser dashboard for vehicle registration, ambulance/emergency views, signal management, routes, notifications, and analytics.
 - An Express API with MongoDB persistence for vehicle, ambulance, lane, and signal records.
 - An optional serial link from the API to an Arduino or simulator to request a lane signal change.
+- An optional, backend-managed SUMO corridor simulation started by activating a mission on the Missions page.
 
-This is a prototype, not a production traffic-control system. The checked-in code contains no AI model, machine-learning pipeline, live traffic feed, or complete route-optimization engine. Several dashboard panels use sample values, and some emergency and routing steps are simulations. Do not treat screen labels such as “AI Route Efficiency” or displayed analytics as measured system output.
+This is a prototype, not a production traffic-control system. The checked-in code contains no AI model, machine-learning pipeline, live traffic feed, or complete real-road route-optimization engine. The SUMO corridor is synthetic, runs only when a valid mission is activated, and does not provide real GPS, TomTom observations, or physical signal control. Several dashboard panels still use sample values; do not treat screen labels such as “AI Route Efficiency” or displayed analytics as measured system output.
 
 ## Architecture and data flow
 
@@ -21,6 +35,7 @@ This is a prototype, not a production traffic-control system. The checked-in cod
 - `vvce/` is the React 18/Vite single-page dashboard. `vvce/src/main.jsx` mounts the app, `vvce/src/App.jsx` defines routes/providers, and `vvce/src/pages/` contains the main screens.
 - `crud/` is the Node.js/Express/Mongoose backend. The `npm start` script runs `crud/index.js`, which connects to MongoDB and mounts API routes. `crud/server.js` is a different, standalone serial-dispatch server.
 - `crud/model/` contains Mongoose schemas; `crud/routes/` defines HTTP endpoints; `crud/controller/` contains some route handlers. Some routes implement handlers inline instead of using a controller.
+- `sim/` contains the synthetic SUMO scenario generator, traffic-aware demo routing, conflict helpers, headless TraCI publisher, and SUMO-independent tests. The backend starts it as a managed child process; frontend code never launches a local simulator.
 - `crud/arduino_server/arduino-server.js` creates the serial dispatch router used by `crud/index.js`. It is not the same server as `crud/server.js`.
 - The frontend Vite development server proxies `/api` requests to `http://localhost:8000`. A Google Maps browser key is read from `VITE_GOOGLE_MAPS_API_KEY`.
 
@@ -33,6 +48,8 @@ This is a prototype, not a production traffic-control system. The checked-in cod
 | `/api/vehicles` | `crud/routes/vehicleRoute.js` | Vehicle registration and CRUD endpoints. |
 | `/api/ambulance` | `crud/routes/ambulanceRoute.js` | Ambulance activation, active ambulances, lane status/dispatch, and mission completion endpoints. |
 | `/api/verify` | `crud/routes/verifyroute.js` | Vehicle/engine and ambulance-ID verification endpoints. |
+| `/api/missions` | `crud/routes/missionRoute.js` | MongoDB-backed mission creation/list/detail/deletion, lifecycle actions, and position updates. |
+| `/api/simulations` | `crud/routes/simulationRoute.js` | Returns synthetic network configuration and persisted run state. Runs start only through mission activation; there is no separate simulation start endpoint. |
 | `/api/dispatch` | `crud/arduino_server/arduino-server.js` | Validates lane and ambulance type, then writes a serial command. |
 | `/health` | inline in `crud/index.js` | Basic server health response. |
 
@@ -47,21 +64,24 @@ This is a prototype, not a production traffic-control system. The checked-in cod
 5. Show the ambulance, route, signal status, and mission lifecycle to the operator.
 6. When the mission ends, mark it complete and release the assigned lane.
 
-The code only implements parts of this path and currently has contract and schema gaps described below.
+For the SUMO demo specifically, the Missions-page Activate action validates the existing registered `Vehicle.vehicleId` and explicit synthetic origin/destination settings, then calls the existing `POST /api/missions/:id/activate` endpoint. The backend starts at most one run for that mission and returns `{ data: mission, simulation: run }` only after the runner reports `RUNNING`; failed preflight/startup does not activate the mission. The simulation UI is opened only after this response. The code only implements parts of the broader real-world dispatch path and has contract/schema gaps described below.
 
 ## Important implementation facts for future AI changes
 
 These are observed implementation details and should guide future work:
 
 - **Backend entry points are easy to confuse.** `crud/package.json` defines `npm start` as `nodemon index.js`. `index.js` is the MongoDB API server; `server.js` is a standalone serial-only server. Both default to port `8000`, so they cannot normally run together.
-- **The ambulance page is mock-driven.** `vvce/src/pages/AmbulancesPage.jsx` creates its displayed ambulance list locally, then sends a dispatch request directly to `/api/dispatch`.
-- **The dashboard active-ambulance request does not match the mounted API.** `ActiveAmbulances.jsx` requests `/api/vehicle/active`; the backend mounts `/api/vehicles` and `/api/ambulance`. These are different paths.
-- **Vehicle registration and verification do not share one complete data contract.** The registration controller saves only `driverName` and `vehicleNumber` through `model/Vehicle.js`. Verification and ambulance activation code also expects `engineNumber`, `ambulanceId`, and/or an `available` status. Those fields/statuses are not in that registration model.
+- **SUMO is an optional prerequisite for mission activation.** The backend uses `SUMO_HOME` or explicit `SUMO_BINARY`/`NETCONVERT_BINARY`, plus `SIMULATION_PYTHON` and optional `SIMULATION_STARTUP_TIMEOUT_MS`. If prerequisites are missing or the run does not start, the API reports an error and does not return success. Windows setup is in `sim/README.md`.
+- **Simulation records are synthetic.** The `DEMO` source uses local SUMO coordinates and generated traffic/restrictions. It rejects unsupported live mode; do not represent this as live traffic, GPS, real-road mapping, or physical signal control.
+- **Simulation contract and events.** `GET /api/simulations/config` returns demo options; `GET /api/simulations/:missionId` reads run state. REST activation uses the mission ID and configured demo origin/destination edges. `simulation:update` is an outbound Socket.IO update, not an inbound telemetry feed. Existing real GPS positions remain a separate mission API path.
+- **The ambulance page is intentionally simulation-driven.** `vvce/src/pages/AmbulancesPage.jsx` creates fixed ambulance/lane rows locally, then sends a dispatch request directly to `/api/dispatch`. It does not show MongoDB missions or registered vehicles. Keep the simulation behavior intact unless the user explicitly asks to integrate it.
+- **The dashboard emergency list is mission-driven, not lane-driven.** `vvce/src/components/dashboard/ActiveAmbulances.jsx` reads `/api/missions` and lists missions in `CREATED` or `ACTIVE` state. Clicking a row fetches full mission details when needed. It does not infer a lane assignment from the vehicle ID.
+- **Vehicle registration and emergency verification do not share one complete data contract.** The registration controller saves driver name and vehicle number through `model/Vehicle.js`. Verification and ambulance activation code also expects fields such as `engineNumber` and `ambulanceId`, which that registration model does not define.
 - **Lane schemas and lane endpoints disagree.** `model/LaneStatus.js` stores `status` and nested `emergency`/`signals` data. `ambulanceRoute.js` also reads/writes `isOccupied`, `occupiedBy`, and `occupiedAt`, which are not declared in that schema.
 - **Lane initialization appears incomplete.** `index.js` checks for `LaneStatus.initializeLanes` before calling it, but the current `LaneStatus.js` file does not define that helper. The mounted ambulance route also calls it from `/init-lanes`.
-- **Signal UI and API payloads do not align.** The signal form sends `city`, `area`, `intersection`, and other fields. The backend controller persists `signalId`, `location`, and status. The signal list uses `id`, while the Mongoose model uses `signalId`.
+- **Signal registry status is not hardware state.** The registration form sends signal metadata and initial status to the API. The MongoDB model stores `city`, `area`, `intersection`, `location`, signal type/capabilities, and status. The dashboard and signal page render stored records, but this registry API does not control hardware.
 - **The trigger form is a simulation.** `TriggeredEmergency.jsx` locally checks that two strings have a minimum length, waits, creates a random ambulance ID, and navigates; it does not call the verification or activation API.
-- **Route and analytics screens are illustrative.** Route cards, route history, map coordinates, traffic-signal summaries, KPI values, and chart series are hard-coded. The route creation screen navigates after a timer rather than asking a backend route planner.
+- **Route and analytics screens are illustrative.** Route cards, route history, map coordinates, KPI values, and chart series are hard-coded. The dashboard signal list and signal page load registered records, but those records do not represent live hardware state. The route creation screen navigates after a timer rather than asking a backend route planner.
 - **Verification endpoint naming overlaps.** There is a mounted `/api/verify/verify-engine-vehicle` handler in `verifyroute.js` and a separate, unmounted trigger router with a similar route. Check the actual mounted module before changing a frontend request.
 - **User handling is incomplete.** The mounted user routes return dummy messages; `userController.js` is not wired into them. Authentication/session handling is not implemented in the visible application flow.
 - **UI layouts have legacy/duplicate pieces.** The app currently routes through `src/components/Layouts/AppLayout.jsx`. The top-level `vvce/AppLayout.jsx` is a separate older layout and is not imported by the active router.
@@ -88,11 +108,11 @@ npm run dev
 
 The API requires MongoDB, using `MONGO_URI` if configured or `mongodb://localhost:27017/crud` by default. Set `PORT` to change the API port. The Arduino router reads `ARDUINO_PORT` and defaults to `COM15` on Windows. Map components show a configuration message if `VITE_GOOGLE_MAPS_API_KEY` is not set in the frontend's local environment.
 
-To run the alternate serial-only server instead of the MongoDB API, run `node server.js` in `crud/`. Do not run that server and `npm start` at the same time because both use port `8000` by default.
+To run the alternate serial-only server instead of the MongoDB API, run `node server.js` in `crud/`. Do not run that server and `npm start` at the same time because both use port `8000` by default. To use the synthetic SUMO flow, install SUMO and TraCI and follow `sim/README.md`; without SUMO, activation fails explicitly and the mission remains unactivated.
 
 ## File-by-file guide
 
-The repository had 128 tracked files across the repository root and the `crud/` and `vvce/` applications when this guide was prepared. This newly added guide is an additional project file. Installed dependencies (`node_modules`), build output (`dist`), and ignored local environment files are excluded because they are generated, machine-specific, or may contain credentials.
+This guide covers the application files in the repository root, `crud/`, `vvce/`, and `sim/`. Installed dependencies (`node_modules`), build output (`dist`), and ignored local environment files are excluded because they are generated, machine-specific, or may contain credentials.
 
 Each entry gives the file's purpose and its relationship or limitations. “Runtime” means it participates in the app; “support” means it supplies a feature or shared code; “development” means it helps local development; “legacy/mock” means it is not the active source of production behavior or contains illustrative data.
 
@@ -104,15 +124,58 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Helps keep local credentials and dependencies out of commits.
 - Does not itself configure runtime behavior.
 
+### `sim/` — synthetic SUMO simulation
+
+The simulation is an optional backend-managed demo. Its coordinates, traffic, closure, signal/telemetry absence, and limitations are labeled synthetic; the scenario is not mapped to real roads.
+
+#### `sim/README.md`
+
+- Documents Windows SUMO/TraCI setup, backend activation workflow, environment variable names, REST/Socket.IO payloads, and demo/live limitations.
+- Treats the backend-managed headless runner as the normal UI flow; the browser never launches SUMO.
+
+#### `sim/requirements.txt`
+
+- Pins TraCI and sumolib to the installed SUMO release (1.28.0).
+- Install with the same Python executable configured by the backend's `SIMULATION_PYTHON`.
+
+#### `sim/config/manual_values.json`
+
+- Source configuration for the synthetic corridor, local coordinates, routes, background traffic, and a demo closure.
+- Defines the synthetic origin/destination edge choices offered when creating a simulation-capable mission.
+
+#### `sim/build_scenario.py`
+
+- Generates SUMO node, edge, route, network, and configuration files from `manual_values.json`.
+- Generated artifacts are kept under the ignored `sim/scenarios/generated/` directory; requires SUMO's `netconvert`.
+
+#### `sim/routing.py`
+
+- Provides a SUMO-independent traffic-weighted route planner for the demo graph.
+- Rejects unknown endpoints, avoids blocked edges, and checks that a route reaches the fixed destination.
+
+#### `sim/conflicts.py`
+
+- Provides deterministic severity/ETA priority selection and conflict-node hold/release predicates.
+- Does not control physical signals.
+
+#### `sim/publisher.py`
+
+- Runs the generated scenario through headless TraCI as a child process managed by the backend.
+- Receives a validated mission run over stdin and emits line-delimited JSON lifecycle/telemetry updates; it does not fetch TomTom or GPS data.
+
+#### `sim/tests/test_routing.py`
+
+- Tests demo route restriction avoidance, destination preservation, invalid endpoints, and conflict priority/hold/release without requiring SUMO binaries.
+
 ### `README.md`
 
 - Introduces Smart Siren and gives setup instructions and a high-level inventory.
-- Documents running the frontend/backend and configuring Google Maps.
-- Read this guide alongside it for deeper source-by-source behavior; the startup description in this older README may conflict with the actual `crud/package.json` script, which runs `index.js`.
+- Documents running the frontend/backend and configuring Google Maps and the synthetic SUMO demo.
+- Read this guide alongside it for deeper source-by-source behavior; source and package scripts are authoritative if they differ.
 
 ### `PROJECT_GUIDE.md`
 
-- This file: explains project purpose, architecture, runtime routes, known implementation gaps, and every tracked application file.
+- This file: explains project purpose, architecture, runtime routes, known implementation gaps, and the application files in root, `crud/`, `vvce/`, and `sim/`.
 - Intended to be uploaded as context when asking another AI for help.
 - Treat the source code as authoritative if this document and code diverge.
 
@@ -124,7 +187,12 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 
 - Provides a short backend overview, a categorized file table, and backend setup notes.
 - Is useful for backend orientation but less comprehensive than this guide.
-- Its current entry-point descriptions may be stale; confirm the actual script in `crud/package.json` and source files.
+- Identifies `index.js` as the MongoDB API entry point and `server.js` as the separate serial-only server; confirm runtime details against `crud/package.json` and source files.
+
+#### `crud/.env.example`
+
+- Lists local backend configuration names and the verified Windows SUMO/Python paths without credentials.
+- Copy or merge values into the ignored `crud/.env`; never replace existing private values with this template.
 
 #### `crud/activeambulances.json`
 
@@ -149,7 +217,9 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Main backend entry point launched by `npm start` (`nodemon index.js`).
 - Creates the Express app, configures CORS/body parsing/request logging, and mounts the API route modules.
 - Connects to MongoDB using `MONGO_URI` or the local `crud` database default, then starts listening on `PORT` or `8000`.
-- Mounts the Arduino router under `/api/dispatch` and provides `/health`.
+- Mounts the Arduino router under `/api/dispatch`, the mission router under `/api/missions`, the simulation router under `/api/simulations`, and provides `/health`.
+- Attaches the Socket.IO server to the same HTTP server and starts the mission watchdog after MongoDB connects.
+- Starts the simulation manager after the database connection and asks active child simulations to stop during server shutdown.
 - Attempts to call `LaneStatus.initializeLanes` only if that method exists; the current model file does not define it.
 - Registers a global Express error middleware for requests that reach it through `next(error)`.
 
@@ -192,6 +262,18 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Writes a newline-terminated command such as `L2:GREEN` to the serial device.
 - This is a hardware integration boundary; a successful write only confirms that bytes were accepted by the serial library, not that an intersection physically changed state.
 
+### `crud/config/`
+
+#### `crud/config/constants.js`
+
+- Defines mission lifecycle statuses (`CREATED`, `ACTIVE`, `ARRIVED`, `CLOSED`, `ABORTED`), permitted socket event names including `simulation:update`, maximum retained GPS positions, and severity bounds/default.
+- Serves as the shared source of mission and realtime constants for backend services.
+
+#### `crud/config/index.js`
+
+- Loads backend environment configuration from `crud/.env` and exports the normalized port, MongoDB URI, CORS origins, watchdog intervals, legacy migration path, and SUMO/Python executable and startup-timeout settings.
+- Supplies local defaults for development; actual environment values and credentials must remain private.
+
 ### `crud/controller/`
 
 #### `crud/controller/ambulanceController.js`
@@ -206,8 +288,8 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Uses `model/trafficSignalModel.js` to create, count, list, and update traffic signal documents.
 - Also exports alternate list/get/delete/status functions and a placeholder `controlTrafficSignal` handler.
 - The mounted `trafficSignalRoute.js` currently imports only registration, list, and update functions.
-- Its expected registration fields are `signalId`, `location`, and `status`; the frontend registration form sends a different, richer payload.
-- The import path spells the model filename `TrafficSignalModel.js` with different capitalization than the tracked file `trafficSignalModel.js`; Windows commonly tolerates this, but case-sensitive filesystems may not.
+- Registration validates `signalId`, `city`, `area`, `intersection`, optional type/capability flags, and status; it composes a display `location` string before saving.
+- The list handler returns the saved signal documents as an array. The list/update paths do not send commands to the Arduino.
 
 #### `crud/controller/trigger-control.js`
 
@@ -238,6 +320,13 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Returns a boolean `valid` field and basic error responses.
 - It is not imported by the currently mounted `verifyroute.js`, which implements its own verification logic using `model/Vehicle.js`.
 
+#### `crud/controller/missionController.js`
+
+- Thin HTTP adapter for mission service functions: create, list, get one, delete, activate, add position, mark arrived, close, and abort.
+- Uses `asyncHandler` so rejected service promises flow into the mission router's error handler.
+- Mission activation delegates to the simulation manager; its successful response includes the persisted mission and run. Activation errors do not claim success.
+- Wraps other successful responses in `{ data }` and returns a small ID/message payload for deletion.
+
 ### `crud/model/`
 
 #### `crud/model/ActiveAmbulance.js`
@@ -254,6 +343,19 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Does not currently define `initializeLanes`.
 - Does not define `isOccupied`, `occupiedBy`, or `occupiedAt`, even though the mounted ambulance routes access these properties.
 
+#### `crud/model/Mission.js`
+
+- Defines a persisted emergency trip document in MongoDB's `missions` collection.
+- Stores `vehicleId`, lifecycle status, ordered route stops, capped GPS position history, severity, optional ETA percentiles, lifecycle timestamps, watchdog timestamp, abort reason, optional migration idempotency key, and explicit simulation mode/origin/destination settings.
+- Adds indexes for status, vehicle ID, and unique sparse legacy migration key.
+- Is the source of truth for `/api/missions` and for the dashboard's emergency-vehicle mission list; it is separate from the `Vehicle` and `ActiveAmbulance` models. `Vehicle.vehicleId` is the canonical registration identity validated for simulation activation.
+
+#### `crud/model/SimulationRun.js`
+
+- Persists the unique run for a mission, lifecycle status, run ID, source/mode, sequence-ordered local telemetry, route/destination, demo traffic/restrictions, conflict state, and timestamps.
+- A unique mission index and monotonically increasing update sequence prevent concurrent duplicate runs and stale/out-of-order updates from replacing newer state.
+- Coordinates are SUMO-local demo positions, not GPS coordinates.
+
 #### `crud/model/Vehicle.js`
 
 - Defines the vehicle-registration schema used by `vehicleController.js` and `verifyroute.js`.
@@ -269,9 +371,9 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 
 #### `crud/model/trafficSignalModel.js`
 
-- Defines a simple traffic-signal document with required `signalId`, `location`, and `status`.
+- Defines a traffic-signal document with required `signalId`, city, area, intersection, and display location, plus signal type, camera/pedestrian capability flags, and status.
 - Is the schema imported by the traffic-signal controller.
-- Does not include the city/area/intersection/camera/pedestrian fields sent by the frontend form.
+- `status` is a registry value from `TRAFFIC_SIGNAL_STATUSES`; it is not proof of a physical light color or hardware connectivity.
 
 #### `crud/model/trigger-model.js`
 
@@ -321,6 +423,20 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Imports other controller handlers that are currently unused by the route file.
 - Its endpoint behavior is narrower than the UI labels imply; there is no hardware signal-control operation here.
 
+#### `crud/routes/missionRoute.js`
+
+- Defines the MongoDB-backed mission API mounted at `/api/missions`.
+- `POST /` creates; `GET /` lists with status/pagination validation; `GET /:id` reads a mission; `DELETE /:id` deletes it.
+- `POST /:id/activate`, `/position`, `/arrive`, `/close`, and `/abort` perform lifecycle or telemetry actions. Activation requires a valid registered vehicle and explicit supported demo endpoints, preflights SUMO, and returns both mission and run after startup.
+- Validates Mongo ObjectId route parameters and request fields; maps service errors to HTTP status codes and JSON responses.
+
+#### `crud/routes/simulationRoute.js`
+
+- Is mounted at `/api/simulations`.
+- `GET /config` returns the explicitly synthetic network and available demo origin/destination choices.
+- `GET /:missionId` returns the persisted run for that mission; there are no separate start or cancel routes because run creation/cancellation follow the existing mission activation/abort lifecycle.
+- Returns errors for missing run records instead of generating pretend live state.
+
 #### `crud/routes/trigger-route.js`
 
 - Maps engine/vehicle verification and ambulance activation/listing to `trigger-control.js`.
@@ -354,6 +470,70 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Can reduce repeated `try/catch` forwarding in routes that adopt it.
 - The current route files mostly implement their own error handling and do not consistently use this helper.
 
+### Mission backend support files
+
+#### `crud/middleware/validate.js`
+
+- Provides hand-written validators for mission ObjectId parameters, creation payloads, position telemetry, list query filters, and abort reasons.
+- Rejects invalid input with HTTP 400 before the controller calls the service.
+
+#### `crud/services/mission/errors.js`
+
+- Defines `AppError`, an error carrying an HTTP status and optional detail information for mission service failures.
+
+#### `crud/services/mission/missionStateMachine.js`
+
+- Defines the legal mission transitions without database or network I/O: `CREATED → ACTIVE → ARRIVED → CLOSED`; `ABORTED` is reachable from `CREATED` or `ACTIVE`.
+- Exposes helpers used to check or apply transitions and assign matching timestamps.
+
+#### `crud/services/mission/missionService.js`
+
+- Owns mission persistence and business behavior: creation, filtered listing, detail lookup, deletion, lifecycle transitions, and GPS position updates.
+- Uses MongoDB conditional updates for lifecycle transitions to prevent concurrent requests from applying an illegal transition.
+- Retains at most 500 positions per mission and emits `mission:update` events after successful changes.
+
+#### `crud/services/simulation/simulationContract.js`
+
+- Validates mission status, registered canonical `Vehicle.vehicleId`, explicit `DEMO` mode, and known synthetic network endpoints.
+- Rejects unsupported live mode or missing configuration; it does not infer a destination or present sample coordinates as production data.
+
+#### `crud/services/simulation/simulationManager.js`
+
+- Preflights SUMO and the generated network before activating a mission, then ensures at most one run per mission.
+- Owns the Python/TraCI child lifecycle, persists sequence-ordered run updates, emits `simulation:update`, and requests shutdown/cancellation cleanup.
+- A successful activation response means the run reported `RUNNING`; absent SUMO or failed startup returns an error rather than a success-shaped response.
+
+#### `crud/jobs/missionWatchdog.js`
+
+- Periodically queries MongoDB for `ACTIVE` missions that have not sent a position within the configured timeout.
+- Aborts stale missions with reason `WATCHDOG_TIMEOUT` and emits an internal watchdog event; timer failures are logged.
+
+#### `crud/realtime/eventBus.js`
+
+- Exports the process-wide Node EventEmitter shared by mission services and Socket.IO.
+
+#### `crud/realtime/socketServer.js`
+
+- Attaches Socket.IO to the HTTP server and forwards configured mission, signal, preemption, metrics, and `simulation:update` events from the event bus to connected clients.
+- REST API operation remains available if Socket.IO cannot be loaded.
+
+#### `crud/scripts/migrateActiveAmbulances.js`
+
+- One-time migration utility for converting entries in `activeambulances.json` into Mission records.
+- Defaults legacy records to `CLOSED`, supports an explicit `CLOSED` or `ACTIVE` target, and uses a hash-based `legacyKey` so repeated runs do not duplicate records.
+- Never deletes or mutates the source JSON file.
+
+#### `crud/tests/unit/`
+
+- `missionService.test.js` tests mission persistence, lifecycle transitions, concurrency, position caps, errors, and event emission against an in-memory MongoDB.
+- `missionStateMachine.test.js` tests legal and illegal lifecycle transitions.
+- `missionWatchdog.test.js` tests stale-mission abort behavior and watchdog start/stop.
+- `simulationContract.test.js` tests canonical vehicle, mission, and explicit demo-contract validation.
+- `simulationRun.test.js` tests the simulation-run schema and its per-mission uniqueness/update fields.
+- `trafficSignalController.test.js` tests traffic signal API registration and data validation.
+- `validate.test.js` tests mission request validation.
+- Run the backend suite with `cd crud; npm test`.
+
 ## Frontend: `vvce/`
 
 ### Frontend root/configuration
@@ -363,6 +543,15 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 - Shows the expected `VITE_GOOGLE_MAPS_API_KEY` variable using a placeholder value.
 - Documents the name, not a usable credential.
 - Copy to a local environment file and supply a restricted key privately; do not commit real keys.
+
+#### `vvce/AGENTS.md`
+
+- Gives coding agents instructions for frontend changes: read the theme guide, use existing tokens/primitives, preserve active routes, and distinguish simulated behavior from real integrations.
+
+#### `vvce/FRONTEND_THEME.md`
+
+- Documents Smart Siren's visual theme, design tokens, component conventions, and responsive expectations for future UI work.
+- Use it as frontend design guidance, while treating the implementation as the source of truth when the guide and current code differ.
 
 #### `vvce/.gitignore`
 
@@ -436,7 +625,7 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 #### `vvce/src/App.jsx`
 
 - Creates the React Query client and wraps the app with query, tooltip, toaster, sidebar-state, and router providers.
-- Defines routes for dashboard, ambulance management, registration, notifications, signal management, emergency trigger, route/map view, analytics, and settings.
+- Defines routes for dashboard, ambulance management, registration, notifications, signal management, emergency trigger, route/map view, analytics, settings, and `/simulation/:missionId`.
 - Wraps app pages in `src/components/Layouts/AppLayout.jsx`; unknown paths use `NotFound`.
 - Includes both a standard toaster and Sonner toaster.
 - The route set is the source of truth for which pages are reachable; components not routed here may be unused.
@@ -491,15 +680,16 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 
 #### `vvce/src/components/dashboard/ActiveAmbulances.jsx`
 
-- Displays ambulance status, location, destination, ETA, and optimized-signal count in a dashboard card.
-- Fetches data once from `http://localhost:8000/api/vehicle/active`.
-- That request does not match the currently mounted backend prefixes; errors are only logged and the component has no loading/error UI.
+- Displays MongoDB-backed missions in `CREATED` or `ACTIVE` status in the dashboard's emergency-vehicle card.
+- Loads the mission list through the shared mission API/store and subscribes to mission Socket.IO updates with polling fallback.
+- Selecting a row fetches full mission details (including positions) when they are not already loaded and displays `MissionDetailPanel`.
+- It does not retrieve the separate `ActiveAmbulance` records and does not infer a simulation lane from a mission vehicle ID.
 
 #### `vvce/src/components/dashboard/DashboardStats.jsx`
 
 - Renders four summary cards for active ambulances, response time, controlled signals, and route efficiency.
-- The displayed numbers and comparisons are hard-coded, not calculated from API or database data.
-- Treat values as prototype presentation data.
+- The Active Ambulances card counts `ACTIVE` missions from the shared mission store.
+- Response-time, controlled-signal, and route-efficiency figures remain hard-coded presentation values, not measured output.
 
 #### `vvce/src/components/dashboard/Mapview.jsx`
 
@@ -509,9 +699,49 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 
 #### `vvce/src/components/dashboard/TrafficSignals.jsx`
 
-- Renders a dashboard card containing a small traffic-signal status list.
-- Signal IDs, locations, colors, controller ambulances, and time-to-change values are hard-coded sample values.
-- It does not call the traffic-signal API or issue signal commands.
+- Fetches registered traffic signal documents from `GET /api/traffic-signals`, shows location, status, signal ID, type, and update/registration time, and refreshes periodically.
+- Displays loading, empty, and error states; it never invents signal rows or issues hardware commands.
+- Registry `active`/`green`/`yellow`/`red` values are the saved status fields, not confirmation of live signal-controller state.
+
+### `vvce/src/components/domain/missions/`
+
+#### `ConnectionIndicator.jsx`
+
+- Renders the mission Socket.IO connection state (connected, disconnected, or polling fallback).
+
+#### `LiveEventLog.jsx`
+
+- Displays recent mission/realtime events supplied by the mission store, with filtering and a caller-provided clear action.
+
+#### `MissionActions.jsx`
+
+- Presents lifecycle actions for the selected mission and disables actions that violate the frontend transition table unless the explicit test bypass is enabled.
+- Includes a confirmed delete action and the existing mission activation action; the parent navigates only after the backend confirms activation and run startup.
+
+#### `MissionCreateForm.jsx`
+
+- Collects a registered vehicle ID, severity, optional ordered route signal stops, and explicit synthetic demo origin/destination edges.
+- These SUMO edge values are not real-road coordinates or live routing data.
+
+#### `MissionDetailPanel.jsx`
+
+- Displays the selected mission's status, ID, severity, ETAs, abort reason, route signals, GPS trail, and recent positions.
+
+#### `MissionStatusBadge.jsx`
+
+- Maps mission lifecycle statuses to visual badge styles.
+
+#### `MissionTable.jsx`
+
+- Displays the mission list, status filter, sort order, and selection interaction; data loading and API calls are managed by its parent/hooks.
+
+#### `PositionSimulator.jsx`
+
+- Provides a UI for manually adding simulated GPS positions to an active mission and triggering a test burst. It is a test/demo input, not a GPS feed.
+
+#### `missionTransitions.js`
+
+- Frontend copy of allowed mission lifecycle transitions used to enable or disable action buttons. Keep it aligned with `crud/services/mission/missionStateMachine.js`.
 
 ### `vvce/src/components/ui/` — feature components
 
@@ -543,7 +773,7 @@ Each entry gives the file's purpose and its relationship or limitations. “Runt
 
 - Presents a dialog form with signal ID, type, city, area, intersection, status, pedestrian-crossing, and camera fields.
 - Performs basic required-field checks and posts the full form object to `/api/traffic-signals/register`.
-- The backend controller/model expect `signalId`, `location`, and `status`, so payload mapping is needed for persistence to match the UI.
+- Posts signal ID, location parts, type, capability flags, and status to the backend registration controller, which validates and persists those fields and derives the display location.
 - Shows toast feedback and resets/closes after a successful HTTP response.
 
 #### `TriggeredEmergency.jsx`
@@ -893,6 +1123,65 @@ These files are shared presentation wrappers, mostly around Radix UI primitives.
 - Used throughout UI primitives and layouts.
 - Keep shared class-merging behavior centralized here rather than reimplementing it.
 
+### `vvce/src/services/`
+
+#### `vvce/src/services/apiClient.js`
+
+- Fetch wrapper used by the mission API client. Applies the optional `VITE_API_URL`, JSON headers, a ten-second timeout, and normalized HTTP errors.
+
+#### `vvce/src/services/missionApi.js`
+
+- Calls the persistent `/api/missions` REST endpoints for create/list/detail/delete, activation, positions, arrival, close, and abort.
+- Activation returns the persisted mission and simulation run; it does not navigate or show success when the backend rejects the request or runner startup.
+- It does not fall back to an in-memory mock; backend/MongoDB failures are returned to the calling UI.
+
+#### `vvce/src/services/simulationApi.js`
+
+- Loads public synthetic network/options from `GET /api/simulations/config` and a persisted mission run from `GET /api/simulations/:missionId`.
+- Uses the same API base/proxy as the mission client; it does not attempt to start SUMO from the browser.
+
+#### `vvce/src/services/socketClient.js`
+
+- Lazily creates one Socket.IO client, dispatches subscribed event handlers including outbound `simulation:update`, and reports connection/polling status.
+- Socket updates are a realtime enhancement; mission CRUD uses the REST API.
+
+### `vvce/src/store/`
+
+#### `vvce/src/store/createStore.js`
+
+- Implements a small external store using React `useSyncExternalStore`, providing get/set/subscribe and selector-hook APIs.
+
+#### `vvce/src/store/missionStore.js`
+
+- Holds the frontend mission cache, ordering, selected mission, status filter, connection state, loading/error state, and event log.
+- Merges list responses with loaded mission detail so list refreshes that omit positions do not discard the selected mission's GPS history.
+- Applies socket updates and removes missions from local state after successful backend deletion.
+
+### Mission-related frontend hooks
+
+#### `vvce/src/hooks/useMissions.js`
+
+- Loads and refreshes the mission list from the REST API using the current status filter, updating loading/error state in the mission store.
+
+#### `vvce/src/hooks/useMissionActions.js`
+
+- Wraps mission API mutations with pending-action and user-visible error state, then updates the shared mission store.
+
+#### `vvce/src/hooks/useMissionSocket.js`
+
+- Subscribes to Socket.IO mission/signal/preemption/metrics events, updates the shared store and event log, and polls the mission API when realtime is unavailable.
+
+### `vvce/src/tests/`
+
+- `setup.js` installs the Testing Library DOM matchers for Vitest.
+- `vvce/src/tests/missions/MissionActions.test.jsx` covers mission action enabled/disabled states and confirmed deletion.
+- `vvce/src/tests/missions/MissionCreateForm.test.jsx` covers mission form validation and submission.
+- `vvce/src/tests/missions/apiClient.test.js` covers successful JSON responses and normalized HTTP errors.
+- `vvce/src/tests/missions/missionStore.test.js` covers store insert/update, socket updates, position preservation, and deletion.
+- `vvce/src/tests/missions/missionTransitions.test.js` covers the frontend transition rules.
+- `vvce/src/tests/missions/socketClient.test.js` verifies singleton Socket.IO initialization.
+- Run the frontend suite with `cd vvce; npm test`.
+
 ### `vvce/src/pages/`
 
 #### `vvce/src/pages/AmbulancesPage.jsx`
@@ -912,7 +1201,7 @@ These files are shared presentation wrappers, mostly around Radix UI primitives.
 
 - Composes the dashboard heading/tabs, summary stats, map, active ambulance panel, and traffic-signal summary.
 - Delegates content to the `components/dashboard/` files.
-- The page is an overview layout; its child panels determine whether values are live or mock (currently most are mock or point to a mismatched endpoint).
+- Mission and signal cards load their respective persisted backend data; summary cards and map/traffic-control panels still include prototype values or limitations described above.
 
 #### `vvce/src/pages/Index.jsx`
 
@@ -942,10 +1231,22 @@ These files are shared presentation wrappers, mostly around Radix UI primitives.
 
 #### `vvce/src/pages/TrafficSignalsPage.jsx`
 
-- Fetches `/api/traffic-signals` once, then provides search and status filtering over the result.
-- Opens the traffic-signal registration form and renders a signal table.
-- The page expects a signal `id`, while the backend model uses `signalId`; the form submits fields that do not match the backend schema.
-- The history tab is empty placeholder content; errors are only logged.
+- Fetches `/api/traffic-signals`, provides search and status filtering, and renders registered signal records.
+- Opens `TrafficSignalRegistrationForm` and refreshes the list after successful registration.
+- Uses the backend's `signalId`/`location` fields with compatible fallbacks for older records.
+- The history tab is placeholder content; API load failures are logged in this page.
+
+#### `vvce/src/pages/MissionsPage.jsx`
+
+- Main mission operations screen: loads/filter/sorts persisted missions, creates missions, loads selected mission detail, and exposes lifecycle, delete, position-simulator, and event-log controls.
+- Uses `useMissions`, `useMissionSocket`, `useMissionActions`, the mission store, and components in `components/domain/missions/`.
+- Mission mutations go to the MongoDB-backed API; no browser-only mission mock is used. It navigates to `/simulation/:missionId` only after activation returns a started run.
+
+#### `vvce/src/pages/SimulationPage.jsx`
+
+- Loads the selected mission's persisted `SimulationRun` and listens for `simulation:update` events for that mission.
+- Displays synthetic run status, local position/speed, destination-preserving route, configured demo restriction/traffic, and conflict state, with loading/error/disconnected/stale/completed states and a dashboard return link.
+- Labels the corridor and observations as synthetic and states that signal control/GPS are unavailable; it does not render these local coordinates as real map/GPS data.
 
 ## Suggested AI workflow for future changes
 

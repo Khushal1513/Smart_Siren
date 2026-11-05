@@ -87,7 +87,7 @@ async function initializeSocket() {
       setStatus('polling');
     });
 
-    const events = ['mission:update', 'signal:update', 'preemption:plan', 'metrics:update'];
+    const events = ['mission:update', 'signal:update', 'preemption:plan', 'metrics:update', 'simulation:update'];
     events.forEach((ev) => {
       socketInstance.on(ev, (data) => {
         dispatchEvent(ev, data);

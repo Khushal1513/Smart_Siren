@@ -51,7 +51,7 @@ export async function getMission(id) {
  */
 export async function activateMission(id) {
   const res = await apiClient(`/api/missions/${id}/activate`, { method: 'POST' });
-  return res.data;
+  return { mission: res.data, simulation: res.simulation };
 }
 
 /**

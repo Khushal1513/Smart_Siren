@@ -46,9 +46,30 @@ export function validateCreateMission(req, res, next) {
   if (b.severity !== undefined && !(Number.isInteger(b.severity) && b.severity >= SEVERITY.MIN && b.severity <= SEVERITY.MAX)) {
     errs.push(`severity must be an integer ${SEVERITY.MIN}-${SEVERITY.MAX}`);
   }
+  let simulationConfig;
+  if (b.simulationConfig !== undefined) {
+    if (!isObj(b.simulationConfig)) {
+      errs.push('simulationConfig must be an object');
+    } else {
+      const { mode, originEdgeId, destinationEdgeId } = b.simulationConfig;
+      if (!['DEMO', 'LIVE'].includes(mode)) errs.push('simulationConfig.mode must be DEMO or LIVE');
+      if (typeof originEdgeId !== 'string' || !originEdgeId.trim()) {
+        errs.push('simulationConfig.originEdgeId must be a non-empty string');
+      }
+      if (typeof destinationEdgeId !== 'string' || !destinationEdgeId.trim()) {
+        errs.push('simulationConfig.destinationEdgeId must be a non-empty string');
+      }
+      simulationConfig = {
+        mode,
+        originEdgeId: typeof originEdgeId === 'string' ? originEdgeId.trim() : originEdgeId,
+        destinationEdgeId: typeof destinationEdgeId === 'string' ? destinationEdgeId.trim() : destinationEdgeId,
+      };
+    }
+  }
   if (errs.length) return reject(res, errs);
 
   req.body = { vehicleId: b.vehicleId.trim(), route, severity: b.severity };
+  if (simulationConfig) req.body.simulationConfig = simulationConfig;
   return next();
 }
 

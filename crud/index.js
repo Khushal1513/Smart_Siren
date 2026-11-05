@@ -12,9 +12,11 @@ import vehicleRoute from './routes/vehicleRoute.js';
 import ambulanceRoute from './routes/ambulanceRoute.js';
 import verifyRoute from './routes/verifyroute.js';
 import missionRoute from './routes/missionRoute.js';
+import simulationRoute from './routes/simulationRoute.js';
 import { createArduinoRouter } from './arduino_server/arduino-server.js';
 import { attachSocketServer } from './realtime/socketServer.js';
 import { startMissionWatchdog } from './jobs/missionWatchdog.js';
+import { initializeSimulationManager, shutdownSimulationManager } from './services/simulation/simulationManager.js';
 
 // Import models for initialization
 import LaneStatus from './model/LaneStatus.js';
@@ -49,6 +51,7 @@ app.use('/api/vehicles', vehicleRoute);
 app.use('/api/ambulance', ambulanceRoute);
 app.use('/api/verify', verifyRoute);
 app.use('/api/missions', missionRoute);
+app.use('/api/simulations', simulationRoute);
 app.use('/api/dispatch', createArduinoRouter());
 
 // Health check endpoint
@@ -78,6 +81,7 @@ mongoose.connect(config.mongoUri)
   }
 
   missionWatchdog = startMissionWatchdog();
+  await initializeSimulationManager();
   
   // Start server
   httpServer.listen(config.port, () => {
@@ -92,7 +96,13 @@ mongoose.connect(config.mongoUri)
 
 httpServer.on('close', async () => {
   missionWatchdog?.stop();
-  await mongoose.disconnect();
+  try {
+    await shutdownSimulationManager();
+  } catch (error) {
+    console.error('Simulation shutdown error:', error);
+  } finally {
+    await mongoose.disconnect();
+  }
 });
 
 // Global error handler

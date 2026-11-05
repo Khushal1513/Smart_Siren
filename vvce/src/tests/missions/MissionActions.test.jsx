@@ -52,4 +52,42 @@ describe('MissionActions', () => {
     expect(window.confirm).toHaveBeenCalledWith('Permanently delete the mission for AMB-1?');
     vi.restoreAllMocks();
   });
+
+  it('only reports activation after the backend confirms a started run', async () => {
+    const activateMission = vi.fn().mockResolvedValue({
+      mission: { _id: '1', vehicleId: 'AMB-1', status: 'ACTIVE' },
+      simulation: { status: 'RUNNING', runId: 'run-1' },
+    });
+    const onActivated = vi.fn();
+    render(
+      <MissionActions
+        mission={{ _id: '1', vehicleId: 'AMB-1', status: 'CREATED' }}
+        actions={{ activateMission }}
+        loading={false}
+        onActivated={onActivated}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^activate$/i }));
+    await waitFor(() => expect(onActivated).toHaveBeenCalledWith(
+      expect.objectContaining({ simulation: expect.objectContaining({ status: 'RUNNING' }) })
+    ));
+  });
+
+  it('does not report activation when backend activation or simulation startup fails', async () => {
+    const activateMission = vi.fn().mockRejectedValue(new Error('SUMO unavailable'));
+    const onActivated = vi.fn();
+    render(
+      <MissionActions
+        mission={{ _id: '1', vehicleId: 'AMB-1', status: 'CREATED' }}
+        actions={{ activateMission }}
+        loading={false}
+        onActivated={onActivated}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^activate$/i }));
+    await waitFor(() => expect(activateMission).toHaveBeenCalledOnce());
+    expect(onActivated).not.toHaveBeenCalled();
+  });
 });

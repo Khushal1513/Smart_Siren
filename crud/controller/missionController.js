@@ -1,4 +1,5 @@
 import * as svc from '../services/mission/missionService.js';
+import { startMissionSimulation } from '../services/simulation/simulationManager.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 export const create = asyncHandler(async (req, res) => {
@@ -7,7 +8,8 @@ export const create = asyncHandler(async (req, res) => {
 });
 
 export const activate = asyncHandler(async (req, res) => {
-  res.json({ data: await svc.activateMission(req.params.id) });
+  const { mission, simulation } = await startMissionSimulation(req.params.id);
+  res.json({ data: mission, simulation });
 });
 
 export const addPosition = asyncHandler(async (req, res) => {

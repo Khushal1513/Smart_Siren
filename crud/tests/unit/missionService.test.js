@@ -38,6 +38,18 @@ describe('missionService', () => {
     expect(events[0]).toMatchObject({ missionId: String(m._id), status: 'CREATED', position: null });
   });
 
+  test('createMission persists explicit simulation configuration for activation', async () => {
+    const simulationConfig = {
+      mode: 'DEMO',
+      originEdgeId: 'S1_S2',
+      destinationEdgeId: 'S3_S4',
+    };
+    const m = await svc.createMission({ vehicleId: 'VEH-1', simulationConfig });
+
+    expect(m.simulationConfig.toObject()).toEqual(simulationConfig);
+    await expect(svc.getMission(m._id)).resolves.toMatchObject({ simulationConfig });
+  });
+
   test('createMission rejects missing vehicleId', async () => {
     await expect(svc.createMission({})).rejects.toMatchObject({ status: 400 });
   });

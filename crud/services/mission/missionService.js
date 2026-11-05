@@ -89,6 +89,7 @@ async function createMission(input = {}) {
     vehicleId: input.vehicleId,
     route: input.route || [],
     severity: input.severity,
+    simulationConfig: input.simulationConfig,
     status: S.CREATED,
   });
   emitUpdate(m);

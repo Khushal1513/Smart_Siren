@@ -1,0 +1,41 @@
+{
+  "scenarioName": "Smart Siren Synthetic Eastbound Corridor",
+  "mode": "DEMO",
+  "source": "SYNTHETIC_DEMO",
+  "stepLengthSeconds": 0.2,
+  "speedFactor": 20,
+  "maxSimulationSeconds": 900,
+  "randomSeed": 1513,
+  "nodes": [
+    { "id": "S1", "x": 0, "y": 0 },
+    { "id": "S2", "x": 400, "y": 0 },
+    { "id": "S3", "x": 800, "y": 0 },
+    { "id": "S4", "x": 1200, "y": 0 },
+    { "id": "N1", "x": 400, "y": 300 },
+    { "id": "N2", "x": 800, "y": 300 }
+  ],
+  "edges": [
+    { "id": "S1_S2", "from": "S1", "to": "S2", "lengthM": 400, "speedKmh": 50, "lanes": 2, "trafficMultiplier": 1.0 },
+    { "id": "S2_S3", "from": "S2", "to": "S3", "lengthM": 400, "speedKmh": 40, "lanes": 2, "trafficMultiplier": 1.8 },
+    { "id": "S3_S4", "from": "S3", "to": "S4", "lengthM": 400, "speedKmh": 50, "lanes": 2, "trafficMultiplier": 1.0 },
+    { "id": "S2_N1", "from": "S2", "to": "N1", "lengthM": 300, "speedKmh": 35, "lanes": 1, "trafficMultiplier": 1.0 },
+    { "id": "N1_N2", "from": "N1", "to": "N2", "lengthM": 400, "speedKmh": 35, "lanes": 1, "trafficMultiplier": 1.0 },
+    { "id": "N2_S3", "from": "N2", "to": "S3", "lengthM": 300, "speedKmh": 35, "lanes": 1, "trafficMultiplier": 1.0 }
+  ],
+  "backgroundTraffic": {
+    "enabled": true,
+    "vehiclesPerHour": 180,
+    "beginSeconds": 0,
+    "endSeconds": 900
+  },
+  "demoRestrictions": [
+    {
+      "segmentId": "S2-S3",
+      "sumoEdgeId": "S2_S3",
+      "status": "BLOCKED",
+      "reason": "Synthetic demo road closure",
+      "enabled": true
+    }
+  ],
+  "signals": []
+}

@@ -22,14 +22,15 @@ export function useMissionActions() {
   const [pendingAction, setPendingAction] = useState(null);
   const [actionError, setActionError] = useState(null);
 
-  const wrapAction = useCallback(async (actionName, fn) => {
+  const wrapAction = useCallback(async (actionName, fn, selectMission = (result) => result) => {
     setPendingAction(actionName);
     setActionError(null);
     let isMounted = true;
     try {
       const result = await fn();
-      if (isMounted && result) {
-        missionActions.upsertMission(result);
+      const mission = selectMission(result);
+      if (isMounted && mission) {
+        missionActions.upsertMission(mission);
       }
       return result;
     } catch (err) {
@@ -49,7 +50,7 @@ export function useMissionActions() {
     actionError,
     clearError: () => setActionError(null),
     createMission: (payload) => wrapAction('create', () => apiCreate(payload)),
-    activateMission: (id) => wrapAction('activate', () => apiActivate(id)),
+    activateMission: (id) => wrapAction('activate', () => apiActivate(id), (result) => result.mission),
     addPosition: (id, pos) => wrapAction('position', () => apiAddPosition(id, pos)),
     markArrived: (id) => wrapAction('arrive', () => apiArrive(id)),
     closeMission: (id) => wrapAction('close', () => apiClose(id)),

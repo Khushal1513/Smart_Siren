@@ -1,0 +1,3 @@
+# Keep these versions aligned with the installed SUMO release.
+traci==1.28.0
+sumolib==1.28.0

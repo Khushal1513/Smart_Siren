@@ -1,8 +1,16 @@
 import React from 'react';
 import { Clock, FileBarChart, Gauge, MapPin, Navigation } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { missionStore } from '@/store/missionStore.js';
 
 export const DashboardStats = () => {
+  const missionsById = missionStore.useStore((state) => state.missionsById);
+  const order = missionStore.useStore((state) => state.order);
+  const activeMissionCount = order.reduce(
+    (count, id) => count + (missionsById[id]?.status === 'ACTIVE' ? 1 : 0),
+    0
+  );
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <Card>
@@ -11,9 +19,9 @@ export const DashboardStats = () => {
           <Gauge className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">8</div>
+          <div className="text-2xl font-bold">{activeMissionCount}</div>
           <p className="text-xs text-muted-foreground">
-            +2 from yesterday
+            Currently on active missions
           </p>
         </CardContent>
       </Card>

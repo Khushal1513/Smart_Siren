@@ -57,7 +57,7 @@ export function MissionDetailPanel({ mission, detailsLoading = false }) {
         <div>
           <span className="text-muted-foreground block text-xs">ETA P50 / P90</span>
           <span className="font-semibold text-foreground">
-            {mission.etaP50}s / {mission.etaP90}s
+            {mission.etaP50 ?? 'Not set'} / {mission.etaP90 ?? 'Not set'}
           </span>
         </div>
         <div>

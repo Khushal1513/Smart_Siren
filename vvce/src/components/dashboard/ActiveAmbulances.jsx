@@ -1,83 +1,124 @@
 import React, { useEffect, useState } from 'react';
+import { AlertCircle, Ambulance } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Clock, MapPin, Navigation } from 'lucide-react';
-import axios from 'axios';
-
-const getStatusBadge = (status) => {
-  switch (status) {
-    case 'emergency':
-      return <Badge className="bg-emergency">Emergency</Badge>;
-    case 'active':
-      return <Badge variant="outline" className="bg-signal-green text-white">Active</Badge>;
-    case 'idle':
-      return <Badge variant="outline">Idle</Badge>;
-    default:
-      return <Badge variant="outline">Unknown</Badge>;
-  }
-};
+import { MissionStatusBadge } from '@/components/domain/missions/MissionStatusBadge.jsx';
+import { MissionDetailPanel } from '@/components/domain/missions/MissionDetailPanel.jsx';
+import { useMissionSocket } from '@/hooks/useMissionSocket.js';
+import { getMission, listMissions } from '@/services/missionApi.js';
+import { missionActions, missionStore } from '@/store/missionStore.js';
 
 export const ActiveAmbulances = () => {
-  const [ambulances, setAmbulances] = useState([]);
+  useMissionSocket();
+
+  const missionsById = missionStore.useStore((state) => state.missionsById);
+  const order = missionStore.useStore((state) => state.order);
+  const [selectedId, setSelectedId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [detailError, setDetailError] = useState('');
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   useEffect(() => {
-    const fetchAmbulances = async () => {
-      try {
-        const res = await axios.get('http://localhost:8000/api/vehicle/active'); // Change URL if needed
-        setAmbulances(res.data);
-      } catch (error) {
-        console.error('Error fetching ambulances:', error);
-      }
+    let active = true;
+
+    listMissions({ limit: 200 })
+      .then((response) => {
+        if (active) missionActions.setMissions(response.data);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
     };
-    fetchAmbulances();
   }, []);
+
+  const emergencyMissions = order
+    .map((id) => missionsById[id])
+    .filter((mission) => mission && ['CREATED', 'ACTIVE'].includes(mission.status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const selectedMission = selectedId ? missionsById[selectedId] : null;
+  const selectedMissionId = selectedMission?._id;
+  const hasMissionDetails = Array.isArray(selectedMission?.positions);
+
+  useEffect(() => {
+    if (!selectedMissionId || hasMissionDetails) {
+      setDetailError('');
+      setDetailsLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setDetailsLoading(true);
+    setDetailError('');
+    getMission(selectedMissionId)
+      .then((mission) => {
+        if (active) missionActions.upsertMission(mission);
+      })
+      .catch((loadError) => {
+        if (active) setDetailError(loadError.message);
+      })
+      .finally(() => {
+        if (active) setDetailsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedMissionId, hasMissionDetails]);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-medium">Active Ambulances</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-lg font-medium">
+          <Ambulance className="h-5 w-5" />
+          Emergency Ambulances
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {ambulances.map((ambulance) => (
-            <div
-              key={ambulance._id}
-              className={`flex items-center justify-between border-b pb-4 last:border-0 last:pb-0 ${
-                ambulance.status === 'emergency' ? 'bg-emergency/5 -mx-6 px-6' : ''
-              }`}
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{`Ambulance ${ambulance.ambulanceId}`}</span>
-                  {getStatusBadge(ambulance.status)}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span>{ambulance.location}</span>
-                </div>
-                {ambulance.destination && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Navigation className="h-3.5 w-3.5" />
-                    <span>To: {ambulance.destination}</span>
-                  </div>
-                )}
-              </div>
-              <div className="text-right">
-                {ambulance.eta && (
-                  <div className="flex items-center justify-end gap-1 font-medium">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{ambulance.eta}</span>
-                  </div>
-                )}
-                {ambulance.optimizedSignals > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    {ambulance.optimizedSignals} signals optimized
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+      <CardContent className="space-y-4">
+        {loading && emergencyMissions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Loading missions...</p>
+        ) : error ? (
+          <p role="alert" className="text-sm text-destructive">{error}</p>
+        ) : emergencyMissions.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4" />
+            <span>No created or active missions.</span>
+          </div>
+        ) : (
+          <div className="max-h-72 space-y-2 overflow-y-auto">
+            {emergencyMissions.map((mission) => (
+              <button
+                key={mission._id}
+                type="button"
+                aria-pressed={selectedId === mission._id}
+                onClick={() => setSelectedId(mission._id)}
+                className={`flex w-full items-center justify-between gap-3 rounded-md border p-3 text-left transition-colors ${
+                  selectedId === mission._id
+                    ? 'border-primary bg-accent'
+                    : 'border-border hover:bg-accent/50'
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{mission.vehicleId}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Severity {mission.severity ?? 3}
+                  </span>
+                </span>
+                <MissionStatusBadge status={mission.status} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {detailError && <p role="alert" className="text-sm text-destructive">{detailError}</p>}
+        {selectedMission && (
+          <MissionDetailPanel mission={selectedMission} detailsLoading={detailsLoading} />
+        )}
       </CardContent>
     </Card>
   );
